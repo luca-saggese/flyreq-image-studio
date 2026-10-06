@@ -5,6 +5,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { FileText, Image as ImageIcon } from "lucide-react";
 
+import { useI18n } from "@/components/LanguageProvider";
 import { cn } from "@/lib/utils";
 import type { CanvasResourceReference } from "../utils/canvas-resource-references";
 
@@ -38,7 +39,7 @@ function chipHtml(id: string, label: string) {
 }
 
 /** value(含 @[node:id] token) → 编辑器 innerHTML（token 渲染为带 label 的 chip）。 */
-function valueToHtml(value: string, labelByNodeId: Map<string, string>) {
+function valueToHtml(value: string, labelByNodeId: Map<string, string>, unavailableLabel: string) {
   let html = "";
   let lastIndex = 0;
   TOKEN_REGEX.lastIndex = 0;
@@ -46,7 +47,7 @@ function valueToHtml(value: string, labelByNodeId: Map<string, string>) {
   while ((match = TOKEN_REGEX.exec(value))) {
     html += textToHtml(value.slice(lastIndex, match.index));
     const id = match[1];
-    html += chipHtml(id, labelByNodeId.get(id) || "已失效");
+    html += chipHtml(id, labelByNodeId.get(id) || unavailableLabel);
     lastIndex = match.index + match[0].length;
   }
   html += textToHtml(value.slice(lastIndex));
@@ -128,6 +129,7 @@ function getTextInputContext(root: HTMLElement): { textNode: Text; offset: numbe
  * value 以 @[node:<id>] token 存储，与 buildComposerGenerationContext 解析一致。
  */
 export function CanvasMentionEditor({ value, references, onChange, onSubmit, placeholder, className }: Props) {
+  const { t } = useI18n();
   const editorRef = useRef<HTMLDivElement>(null);
   const lastValueRef = useRef<string>("__canvas_init__");
   const labelByNodeIdRef = useRef<Map<string, string>>(new Map());
@@ -152,9 +154,9 @@ export function CanvasMentionEditor({ value, references, onChange, onSubmit, pla
     const el = editorRef.current;
     if (!el) return;
     if (value === lastValueRef.current) return;
-    el.innerHTML = valueToHtml(value, labelByNodeIdRef.current);
+    el.innerHTML = valueToHtml(value, labelByNodeIdRef.current, t("canvas.mention.invalid"));
     lastValueRef.current = value;
-  }, [value]);
+  }, [t, value]);
 
   // references 变化时，仅就地更新已存在 chip 的 label 文本（不动光标）。
   useEffect(() => {
@@ -164,10 +166,10 @@ export function CanvasMentionEditor({ value, references, onChange, onSubmit, pla
       const id = span.dataset.mentionId;
       if (!id) return;
       const labelEl = span.querySelector<HTMLElement>("[data-mention-label]");
-      const label = labelByNodeId.get(id) || "已失效";
+      const label = labelByNodeId.get(id) || t("canvas.mention.invalid");
       if (labelEl && labelEl.textContent !== label) labelEl.textContent = label;
     });
-  }, [labelByNodeId]);
+  }, [labelByNodeId, t]);
 
   const closeMention = useCallback(() => {
     setMention(null);

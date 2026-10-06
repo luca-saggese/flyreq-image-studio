@@ -31,7 +31,6 @@ import { buildNodeGenerationContext, buildNodeGenerationInputs, hydrateNodeGener
 import { buildNodeMentionReferences } from "./utils/canvas-resource-references";
 import { fitNodeSize } from "./utils/canvas-node-size";
 import { getImageBlob, imageToDataUrl, resolveImageUrl, uploadImage, type UploadedImage } from "./lib/image-storage";
-import { imageReferenceLabel } from "./lib/image-reference-prompt";
 import { compressReferenceDataUrl, readFileAsDataUrl } from "./lib/image-utils";
 import { normalizePastedFileName } from "@/lib/pasted-file-naming";
 import { CanvasNodeType, type CanvasConnection, type CanvasGenerationConfig, type CanvasNodeData, type CanvasNodeMetadata, type ContextMenuState, type ConnectionHandle, type Position, type SelectionBox, type ViewportTransform } from "./types";
@@ -44,6 +43,8 @@ import { usePromptOptimizeSetting } from "@/hooks/usePromptOptimizeSetting";
 import { readSseStream } from "@/lib/sse-stream-parser";
 import { MODEL_IMAGE_LIMITS } from "@/lib/gemini-config";
 import { normalizeModel } from "@/lib/model-capabilities";
+import { useI18n } from "@/components/LanguageProvider";
+import type { I18nKey } from "@/lib/i18n";
 import type { PromptWithKey } from "@/lib/prompt-gallery-data";
 
 type DialogState = { type: "crop" | "split" | "upscale" | "angle"; nodeId: string; source: string } | null;
@@ -66,7 +67,28 @@ type CanvasEditorProps = {
 
 const MAX_HISTORY = 50;
 
-function buildAiTextSystemPrompt(existingContent?: string) {
+type CanvasTranslate = (key: I18nKey, values?: Record<string, string | number>) => string;
+
+function buildAiTextSystemPrompt(existingContent: string | undefined, outputLanguage: string) {
+  if (outputLanguage === "English") {
+    const sections = [
+      "You are an AI text-generation assistant inside an infinite canvas.",
+      "",
+      "[Use case]",
+      "- Users write prompts, ideas, plans, titles, notes, and copy in canvas text nodes.",
+      "- Your output is written directly into a text node, so provide ready-to-use content.",
+      "",
+      "[Output requirements]",
+      "- Output only the result; do not explain your reasoning.",
+      "- Write naturally, clearly, and in an editable form.",
+      "- Use Markdown when requested; otherwise prefer plain text.",
+      "- When rewriting, expanding, summarizing, or continuing, respect the tone and purpose of the existing content.",
+    ];
+    if (existingContent?.trim()) {
+      sections.push("", "[Existing text node content]", "---", existingContent, "---", "Use this as context and preserve its key intent.");
+    }
+    return sections.join("\n");
+  }
   const sections = [
     "你是无限画布里的 AI 文本生成助手。",
     "",
@@ -95,27 +117,27 @@ function buildAiTextSystemPrompt(existingContent?: string) {
   return sections.join("\n");
 }
 
-function formatImageLabels(count: number) {
-  const labels = Array.from({ length: count }, (_, index) => imageReferenceLabel(index));
-  if (labels.length <= 1) return labels[0] || "模板参考图";
-  return `${labels.slice(0, -1).join("、")}和${labels[labels.length - 1]}`;
+function formatImageLabels(count: number, t: CanvasTranslate) {
+  const labels = Array.from({ length: count }, (_, index) => t("canvas.editor.referenceImage", { index: index + 1 }));
+  if (labels.length <= 1) return labels[0] || t("canvas.editor.referenceImage", { index: 1 });
+  return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
 }
 
-function buildPromptGalleryCanvasPrompt(referenceImageCount: number) {
-  const referenceLabels = formatImageLabels(referenceImageCount);
-  const targetLabel = imageReferenceLabel(referenceImageCount);
+function buildPromptGalleryCanvasPrompt(referenceImageCount: number, t: CanvasTranslate) {
+  const referenceLabels = formatImageLabels(referenceImageCount, t);
+  const targetLabel = t("canvas.editor.targetImage");
   if (referenceImageCount <= 0) {
     return [
-      `任务：以${targetLabel}中的角色/OC作为唯一身份来源，结合参考提示词生成画面。`,
-      `目标角色图：${targetLabel}。优先保留该角色的脸型、五官、发型、发色、体型、服装、配饰、标志性特征和整体身份辨识度。`,
-      "不要凭空替换角色身份，不要混合其他人物特征。",
+      t("canvas.editor.referenceTaskNoTemplate", { target: targetLabel }),
+      t("canvas.editor.targetDetails", { target: targetLabel }),
+      t("canvas.editor.noIdentityMix"),
     ].join("\n");
   }
   return [
-    `任务：以${targetLabel}中的角色/OC作为唯一身份来源，将其角色特征覆盖到${referenceLabels}的模板画面中。`,
-    `模板参考图：${referenceLabels}。只参考姿势、手势、口型、构图、镜头、背景、光影、材质、风格和行为。`,
-    `目标角色图：${targetLabel}。优先保留该角色的脸型、五官、发型、发色、体型、服装、配饰、标志性特征和整体身份辨识度。`,
-    "不要把模板参考图中的人物身份、脸、发型、服装或配饰当作最终角色来源，不要混合多个参考图的人物特征；除角色身份替换外，模板参考图的画面结构尽量保持不变。",
+    t("canvas.editor.referenceTaskWithTemplate", { target: targetLabel, references: referenceLabels }),
+    t("canvas.editor.templateReferenceDetails", { references: referenceLabels }),
+    t("canvas.editor.targetDetails", { target: targetLabel }),
+    t("canvas.editor.preserveTemplate"),
   ].join("\n");
 }
 
@@ -145,7 +167,7 @@ async function importPromptGalleryImage(url: string, promptContent: string) {
   }
 }
 
-async function optimizeImportedPromptContent(prompt: PromptWithKey, referenceImageCount: number, enabled: boolean): Promise<{ content: string; optimized: boolean }> {
+async function optimizeImportedPromptContent(prompt: PromptWithKey, referenceImageCount: number, enabled: boolean, t: CanvasTranslate): Promise<{ content: string; optimized: boolean }> {
   const original = prompt.content.trim();
   if (!original) return { content: original, optimized: false };
   if (!enabled) return { content: original, optimized: false };
@@ -166,7 +188,7 @@ async function optimizeImportedPromptContent(prompt: PromptWithKey, referenceIma
       model: textModel.modelId,
       mode: "canvas-prompt-gallery-import",
       prompt: original,
-      context: `当前模板包含 ${referenceImageCount} 张参考图。画布会在生成配置里单独放置模板参考图，并用“目标角色图”单独指定用户上传的目标角色/OC图。`,
+          context: t("canvas.editor.galleryOptimizeContext", { count: referenceImageCount }),
     },
     {
       onDelta(token) { output += token; },
@@ -182,12 +204,13 @@ async function optimizeImportedPromptContent(prompt: PromptWithKey, referenceIma
 }
 
 export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, showPromptGallery = true }: CanvasEditorProps) {
+  const { t } = useI18n();
   const theme = canvasTheme;
   const { enabled: promptOptimizeEnabled } = usePromptOptimizeSetting();
   const openProject = useCanvasStore((state) => state.openProject);
   const updateProject = useCanvasStore((state) => state.updateProject);
   const renameProject = useCanvasStore((state) => state.renameProject);
-  const projectTitle = useCanvasStore((state) => state.projects.find((item) => item.id === projectId)?.title) ?? "画布";
+  const projectTitle = useCanvasStore((state) => state.projects.find((item) => item.id === projectId)?.title) ?? t("canvas.workspaceTitle");
   const defaultConfig = useCanvasConfigStore((state) => state.config);
   const setStoreConfig = useCanvasConfigStore((state) => state.setConfig);
 
@@ -359,21 +382,21 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
 
   const createImageNode = useCallback((position: Position, partial?: Partial<CanvasNodeData>): CanvasNodeData => {
     const spec = getNodeSpec(CanvasNodeType.Image);
-    return { id: nanoid(), type: CanvasNodeType.Image, title: spec.title, position, width: spec.width, height: spec.height, metadata: { status: "idle" }, ...partial };
-  }, []);
+    return { id: nanoid(), type: CanvasNodeType.Image, title: t("canvas.node.imageTitle"), position, width: spec.width, height: spec.height, metadata: { status: "idle" }, ...partial };
+  }, [t]);
 
   const createTextNode = useCallback((position: Position, content: string): CanvasNodeData => {
     const spec = getNodeSpec(CanvasNodeType.Text);
     return {
       id: nanoid(),
       type: CanvasNodeType.Text,
-      title: spec.title,
+      title: t("canvas.node.textTitle"),
       position: { x: position.x - spec.width / 2, y: position.y - spec.height / 2 },
       width: spec.width,
       height: spec.height,
       metadata: { ...spec.metadata, content },
     };
-  }, []);
+  }, [t]);
 
   const addNode = useCallback(
     (type: CanvasNodeType) => {
@@ -385,7 +408,13 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
       const node: CanvasNodeData = {
         id: nanoid(),
         type,
-        title: spec.title,
+        title: type === CanvasNodeType.Image
+          ? t("canvas.node.imageTitle")
+          : type === CanvasNodeType.Text
+            ? t("canvas.node.textTitle")
+            : type === CanvasNodeType.Config
+              ? t("canvas.node.configTitle")
+              : t("canvas.node.annotationTitle"),
         position: { x: center.x - spec.width / 2, y: center.y - spec.height / 2 },
         width: spec.width,
         height: spec.height,
@@ -394,7 +423,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
       setNodes((prev) => [...prev, node]);
       setSelectedIds([node.id]);
     },
-    [defaultConfig, pushHistory, viewportCenterWorld],
+    [defaultConfig, pushHistory, t, viewportCenterWorld],
   );
 
   const deleteNodes = useCallback(
@@ -470,11 +499,11 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
           setNodes((prev) => [...prev, node]);
           offset += 28;
         } catch {
-          showToast("图片读取失败", "error");
+          showToast(t("canvas.editor.readImageFailed"), "error");
         }
       }
     },
-    [createImageNode, pushHistory, showToast, viewportCenterWorld],
+    [createImageNode, pushHistory, showToast, t, viewportCenterWorld],
   );
 
   const handleNodeUpload = useCallback((nodeId: string) => {
@@ -498,16 +527,16 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
       try {
         const blob = await getAssetBlob(asset.id);
         if (!blob) {
-          showToast("素材读取失败", "error");
+          showToast(t("canvas.editor.readAssetFailed"), "error");
           return;
         }
         const stored = await uploadImage(blob);
         fillNodeWithConfirm(targetId, stored);
       } catch {
-        showToast("从素材库导入失败", "error");
+        showToast(t("canvas.editor.importAssetFailed"), "error");
       }
     },
-    [assetPicker.nodeId, fillNodeWithConfirm, showToast],
+    [assetPicker.nodeId, fillNodeWithConfirm, showToast, t],
   );
 
   const fillTextNode = useCallback(
@@ -551,12 +580,12 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
           sourceLabel: '无限画布',
           sourceRef: node.id,
         });
-        showToast("提示词素材已保存", "success");
+        showToast(t("canvas.editor.promptAssetSaved"), "success");
       } catch (error) {
-        showToast(error instanceof Error ? error.message : "保存提示词素材失败", "error");
+        showToast(error instanceof Error ? error.message : t("canvas.editor.savePromptAssetFailed"), "error");
       }
     },
-    [showToast],
+    [showToast, t],
   );
 
   const importPromptGalleryTemplate = useCallback(
@@ -565,7 +594,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
       setPromptGalleryImporting(true);
       try {
         const imageUrls = prompt.images.filter(Boolean);
-        const optimizedPrompt = await optimizeImportedPromptContent(prompt, imageUrls.length, promptOptimizeEnabled);
+        const optimizedPrompt = await optimizeImportedPromptContent(prompt, imageUrls.length, promptOptimizeEnabled, t);
         const promptContent = optimizedPrompt.content || prompt.content;
         const importedImages = await Promise.all(imageUrls.map((url) => importPromptGalleryImage(url, promptContent)));
         const failedCount = importedImages.filter((image) => !image.downloaded).length;
@@ -583,7 +612,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
         const referenceNodes = importedImages.map((image, index) => {
           const size = fitNodeSize(image.width, image.height, 240, 240);
           return createImageNode(positionForInput(index), {
-            title: `参考图 ${index + 1}`,
+            title: t("canvas.editor.referenceImage", { index: index + 1 }),
             width: size.width,
             height: size.height,
             metadata: image.metadata,
@@ -591,7 +620,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
         });
 
         const targetNode = createImageNode(positionForInput(referenceNodes.length), {
-          title: "目标人物/OC图",
+          title: t("canvas.editor.targetImage"),
           width: 260,
           height: 220,
           metadata: { status: "idle", canvasRole: "target" },
@@ -601,7 +630,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
         const textNode: CanvasNodeData = {
           id: nanoid(),
           type: CanvasNodeType.Text,
-          title: "参考提示词",
+          title: t("canvas.editor.referencePrompt"),
           position: { x: baseX, y: baseY + inputRows * cellHeight + 36 },
           width: Math.max(340, cols * cellWidth - 24),
           height: 200,
@@ -613,17 +642,17 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
         const promptToken = `@[node:${textNode.id}]`;
         const targetToken = `@[node:${targetNode.id}]`;
         const composerContent = [
-          referenceTokens ? `模板参考图：${referenceTokens}` : "",
-          `参考提示词：${promptToken}`,
-          `目标角色图：${targetToken}`,
+          referenceTokens ? t("canvas.editor.templateReference", { references: referenceTokens }) : "",
+          t("canvas.editor.promptReference", { reference: promptToken }),
+          t("canvas.editor.targetReference", { reference: targetToken }),
           "",
-          buildPromptGalleryCanvasPrompt(referenceNodes.length),
+          buildPromptGalleryCanvasPrompt(referenceNodes.length, t),
         ].join("\n");
         const configSpec = getNodeSpec(CanvasNodeType.Config);
         const configNode: CanvasNodeData = {
           id: nanoid(),
           type: CanvasNodeType.Config,
-          title: "提示词广场生成配置",
+          title: t("canvas.editor.promptGalleryConfig"),
           position: { x: baseX + cols * cellWidth + 96, y: baseY },
           width: configSpec.width,
           height: configSpec.height,
@@ -642,19 +671,19 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
         setPromptGalleryOpen(false);
         showToast(
           failedCount > 0
-            ? `已导入模板，${failedCount} 张参考图使用远程 URL 兜底`
+            ? t("canvas.editor.galleryFallback", { count: failedCount })
             : optimizedPrompt.optimized
-              ? "已从提示词广场导入并优化提示词"
-              : "已从提示词广场导入模板",
+              ? t("canvas.editor.galleryOptimized")
+              : t("canvas.editor.galleryImported"),
           "success",
         );
       } catch {
-        showToast("从提示词广场导入失败", "error");
+        showToast(t("canvas.editor.galleryImportFailed"), "error");
       } finally {
         setPromptGalleryImporting(false);
       }
     },
-    [createImageNode, defaultConfig, promptGalleryImporting, promptOptimizeEnabled, pushHistory, showToast, viewportCenterWorld],
+    [createImageNode, defaultConfig, promptGalleryImporting, promptOptimizeEnabled, pushHistory, showToast, t, viewportCenterWorld],
   );
 
   const applyCanvasTemplate = useCallback(
@@ -674,11 +703,11 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
         metadata: { ...textSpec.metadata, content: template.prompt },
       };
 
-      const composerContent = `参考提示词：@[node:${textNode.id}]`;
+      const composerContent = t("canvas.editor.promptReference", { reference: `@[node:${textNode.id}]` });
       const configNode: CanvasNodeData = {
         id: nanoid(),
         type: CanvasNodeType.Config,
-        title: "流程模板生成配置",
+        title: t("canvas.editor.workflowConfig"),
         position: { x: center.x + configSpec.width / 2 + gap / 2, y: center.y - configSpec.height / 2 },
         width: configSpec.width,
         height: configSpec.height,
@@ -692,9 +721,9 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
       setConnections((prev) => [...prev, connection]);
       setSelectedIds([configNode.id]);
       setTemplateOpen(false);
-      showToast(`已导入模板：${template.title}`, "success");
+      showToast(t("canvas.editor.workflowTemplateImported", { title: template.title }), "success");
     },
-    [defaultConfig, pushHistory, showToast, viewportCenterWorld],
+    [defaultConfig, pushHistory, showToast, t, viewportCenterWorld],
   );
 
   const handleSaveToAssets = useCallback(
@@ -707,16 +736,16 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
           if (url) blob = await (await fetch(url)).blob();
         }
         if (!blob) {
-          showToast("无法读取图片", "error");
+          showToast(t("canvas.editor.imageUnavailable"), "error");
           return;
         }
         await addImageAsset({ blob, sourceKind: "manual", sourceLabel: "无限画布", name: node.title, prompt: node.metadata?.prompt });
-        showToast("已存入我的素材", "success");
+        showToast(t("canvas.editor.savedImage"), "success");
       } catch {
-        showToast("存入素材失败", "error");
+        showToast(t("canvas.editor.saveImageFailed"), "error");
       }
     },
-    [nodeImageUrl, showToast],
+    [nodeImageUrl, showToast, t],
   );
 
   // ---- generation (编排节点 → 输出图片节点；走宿主任务队列；逐节点独立并发) ----
@@ -770,7 +799,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
           setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, status: "idle", generationTaskId: undefined, generationStartedAt: undefined } } : node)));
           onRequireApiKey();
         } else {
-          const message = error instanceof Error ? error.message : "生成失败";
+          const message = error instanceof Error ? error.message : t("canvas.editor.generationFailed");
           setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, status: "error", errorDetails: message } } : node)));
         }
       } finally {
@@ -785,13 +814,13 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
         if (!hasActive) setBusy(sourceNodeId, false);
       }
     },
-    [nodes, onRequireApiKey, setBusy],
+    [nodes, onRequireApiKey, setBusy, t],
   );
 
   const runGeneration = useCallback(
     async (sourceNode: CanvasNodeData) => {
       const promptText = (sourceNode.metadata?.composerContent ?? sourceNode.metadata?.prompt ?? "").trim();
-      if (!promptText) { showToast("请输入提示词", "info"); return; }
+      if (!promptText) { showToast(t("canvas.editor.promptRequired"), "info"); return; }
       const genConfig: CanvasGenerationConfig = sourceNode.metadata?.genConfig ?? defaultConfig;
       const locked = Boolean(sourceNode.metadata?.lockResultNodes);
       const count = genConfig.count;
@@ -800,7 +829,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
       const maxReferenceImages = MODEL_IMAGE_LIMITS[model]?.max || 1;
 
       if (context.imageCount > maxReferenceImages) {
-        showToast("参考图超过模型限制", "error");
+        showToast(t("canvas.editor.referenceLimit"), "error");
         return;
       }
 
@@ -851,7 +880,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
         void startNodeGeneration(nodeId, hydrated.prompt || promptText, hydrated.referenceImages, genConfig, sourceNode.id);
       }
     },
-    [connections, createImageNode, defaultConfig, nodes, pushHistory, startNodeGeneration, showToast],
+    [connections, createImageNode, defaultConfig, nodes, pushHistory, startNodeGeneration, showToast, t],
   );
 
   // 单节点重试（带冷却）
@@ -868,7 +897,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
       const sourceNode = configConnection ? nodes.find((n) => n.id === configConnection.fromNodeId) : undefined;
       const promptText = sourceNode?.metadata?.composerContent ?? sourceNode?.metadata?.prompt ?? node.metadata?.prompt ?? "";
       const genConfig = sourceNode?.metadata?.genConfig ?? defaultConfig;
-      if (!promptText) { showToast("无法获取提示词", "info"); return; }
+      if (!promptText) { showToast(t("canvas.editor.promptUnavailable"), "info"); return; }
 
       void (async () => {
         const context = sourceNode ? buildNodeGenerationContext(sourceNode.id, nodes, connections, promptText) : { prompt: promptText, referenceImages: [], textCount: 0, imageCount: 0 };
@@ -876,14 +905,14 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
         void startNodeGeneration(node.id, hydrated.prompt || promptText, hydrated.referenceImages, genConfig, sourceNode?.id ?? "");
       })();
     },
-    [connections, defaultConfig, nodes, startNodeGeneration, showToast],
+    [connections, defaultConfig, nodes, startNodeGeneration, showToast, t],
   );
 
   const handleRefreshProgress = useCallback(
     async (node: CanvasNodeData) => {
       const taskId = node.metadata?.generationTaskId;
       if (!taskId) {
-        showToast("该节点没有可查询的任务", "info");
+        showToast(t("canvas.editor.taskUnavailable"), "info");
         return;
       }
       try {
@@ -894,21 +923,21 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
           activeGenerationsRef.current.get(node.id)?.abort();
           activeGenerationsRef.current.delete(node.id);
           patchNode(node.id, (n) => ({ ...n, width: size.width, height: size.height, metadata: { ...n.metadata, ...storedToMetadata(image, { prompt: n.metadata?.prompt }), generationTaskId: n.metadata?.generationTaskId, generationStartedAt: n.metadata?.generationStartedAt } }));
-          showToast("已取回生成结果", "success");
+          showToast(t("canvas.editor.resultRetrieved"), "success");
           return;
         }
         if (result.status === "failed" || result.status === "expired") {
-          patchNode(node.id, (n) => ({ ...n, metadata: { ...n.metadata, status: "error", errorDetails: result.error || "生成失败" } }));
-          showToast("任务已失败", "error");
+          patchNode(node.id, (n) => ({ ...n, metadata: { ...n.metadata, status: "error", errorDetails: result.error || t("canvas.editor.generationFailed") } }));
+          showToast(t("canvas.editor.taskFailed"), "error");
           return;
         }
         patchNode(node.id, (n) => ({ ...n, metadata: { ...n.metadata, status: result.status as CanvasNodeMetadata["status"] } }));
-        showToast("已获取当前进度", "info");
+        showToast(t("canvas.editor.progressRetrieved"), "info");
       } catch {
-        showToast("获取进度失败", "error");
+        showToast(t("canvas.editor.progressFailed"), "error");
       }
     },
-    [patchNode, showToast],
+    [patchNode, showToast, t],
   );
 
   // 刷新页面后恢复进行中的生成任务（检查已有 taskId 的状态）
@@ -957,7 +986,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
           }
         } catch {
           if (controller.signal.aborted) return;
-          patchNode(node.id, (n) => ({ ...n, metadata: { ...n.metadata, status: "error", errorDetails: "恢复生成状态失败" } }));
+          patchNode(node.id, (n) => ({ ...n, metadata: { ...n.metadata, status: "error", errorDetails: t("canvas.editor.restoreFailed") } }));
         } finally {
           activeGenerationsRef.current.delete(node.id);
         }
@@ -1214,14 +1243,14 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
           setNodes((prev) => [...prev, node]);
           setSelectedIds([node.id]);
         } catch {
-          showToast("粘贴图片失败", "error");
+          showToast(t("canvas.editor.pasteImageFailed"), "error");
         }
       })();
       return;
     };
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [createImageNode, fillNodeWithConfirm, nodes, pushHistory, selectedIds, showToast, viewportCenterWorld]);
+  }, [createImageNode, fillNodeWithConfirm, nodes, pushHistory, selectedIds, showToast, t, viewportCenterWorld]);
 
   useEffect(() => {
     const handlePasteText = (event: ClipboardEvent) => {
@@ -1323,7 +1352,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
       const controller = new AbortController();
 
       try {
-        const systemPrompt = buildAiTextSystemPrompt(aiTextOriginal);
+        const systemPrompt = buildAiTextSystemPrompt(aiTextOriginal, t("canvas.aiText.outputLanguage"));
         const body = {
           model: textModel.modelId,
           stream: true,
@@ -1348,7 +1377,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
         });
 
         if (!response.ok || !response.body) {
-          throw new Error(`AI 文本生成失败：HTTP ${response.status}`);
+          throw new Error(t("canvas.editor.aiTextRequestFailed", { status: response.status }));
         }
 
         let accumulated = "";
@@ -1381,13 +1410,13 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
         if (!controller.signal.aborted) setAiTextGenerated(accumulated);
       } catch (err) {
         if (!controller.signal.aborted) {
-          setAiTextError(err instanceof Error ? err.message : "AI 生成失败");
+          setAiTextError(err instanceof Error ? err.message : t("canvas.editor.aiTextFailed"));
         }
       } finally {
         setAiTextGenerating(false);
       }
     },
-    [aiTextOriginal, aiTextTargetNodeId, onRequireApiKey],
+    [aiTextOriginal, aiTextTargetNodeId, onRequireApiKey, t],
   );
 
   const handleAiTextAccept = useCallback(() => {
@@ -1420,7 +1449,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
         return;
       }
       const promptText = (configNode.metadata?.composerContent ?? configNode.metadata?.prompt ?? "").trim();
-      if (!promptText) { showToast("请输入提示词", "info"); return; }
+      if (!promptText) { showToast(t("canvas.editor.promptRequired"), "info"); return; }
 
       optimizeHandleRef.current?.abort();
       setOptimizeNodeId(configNode.id);
@@ -1463,9 +1492,9 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
         const mode = hasPromptGalleryRoles ? "canvas-prompt-gallery-config" : images.length > 0 ? "image-to-image" : "text-to-image";
         const context = [
           hasPromptGalleryRoles
-            ? "这是提示词广场导入的配置节点。优化时不要读取模板参考图，只使用已提供的目标角色/OC图；不要把目标角色/OC图转写成外貌文字，请保留并强化对用户上传角色图的引用，让生图模型直接参考图片理解角色。"
+            ? t("canvas.editor.galleryOptimizeInstruction")
             : "",
-          upstreamText ? `已连接的上游文字参考：\n${upstreamText}` : "",
+          upstreamText ? t("canvas.editor.upstreamTextContext", { content: upstreamText }) : "",
         ].filter(Boolean).join("\n\n") || undefined;
 
         optimizeHandleRef.current = streamPromptOptimize(
@@ -1482,7 +1511,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
         setOptimizing(false);
       }
     },
-    [connections, nodeById, nodes, onRequireApiKey, showToast],
+    [connections, nodeById, nodes, onRequireApiKey, showToast, t],
   );
 
   const handleOptimizeCancel = useCallback(() => {
@@ -1534,7 +1563,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
                     const stored = await uploadImage(dataUrl);
                     fillNodeWithConfirm(targetId, stored);
                   } catch {
-                    showToast("图片读取失败", "error");
+                    showToast(t("canvas.editor.readImageFailed"), "error");
                   }
                 })();
               }
@@ -1655,7 +1684,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
       <div data-canvas-no-zoom className="absolute top-4 left-4 z-50 flex items-center gap-2" onPointerDown={(event) => event.stopPropagation()}>
         <Button variant="outline" size="sm" onClick={onBack}>
           <ArrowLeft className="size-4" />
-          画布列表
+          {t("canvas.backToList")}
         </Button>
         {titleDraft !== null ? (
           <form
@@ -1679,7 +1708,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
         ) : (
           <button
             type="button"
-            title="点击重命名"
+            title={t("canvas.rename")}
             onClick={() => setTitleDraft(projectTitle)}
             className="max-w-44 truncate rounded-lg border border-border bg-card/90 px-2.5 py-1 text-xs text-muted-foreground shadow-sm transition-colors hover:text-foreground"
           >
@@ -1813,12 +1842,12 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
       <Dialog open={Boolean(replaceConfirm)} onOpenChange={(open) => !open && setReplaceConfirm(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>替换图片</DialogTitle>
+            <DialogTitle>{t("canvas.editor.replaceImageTitle")}</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">该节点已有图片，是否替换为新图片？</p>
+          <p className="text-sm text-muted-foreground">{t("canvas.editor.replaceImageDescription")}</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setReplaceConfirm(null)}>
-              取消
+              {t("canvas.cancel")}
             </Button>
             <Button
               onClick={() => {
@@ -1826,7 +1855,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
                 setReplaceConfirm(null);
               }}
             >
-              替换
+              {t("canvas.editor.replace")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1835,12 +1864,12 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
       <Dialog open={Boolean(textReplaceConfirm)} onOpenChange={(open) => !open && setTextReplaceConfirm(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>覆盖文本</DialogTitle>
+            <DialogTitle>{t("canvas.editor.overwriteTextTitle")}</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">该文本节点已有内容，是否用素材内容覆盖？</p>
+          <p className="text-sm text-muted-foreground">{t("canvas.editor.overwriteTextDescription")}</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setTextReplaceConfirm(null)}>
-              取消
+              {t("canvas.cancel")}
             </Button>
             <Button
               onClick={() => {
@@ -1848,7 +1877,7 @@ export function CanvasEditor({ projectId, onBack, onRequireApiKey, showToast, sh
                 setTextReplaceConfirm(null);
               }}
             >
-              覆盖
+              {t("canvas.editor.overwrite")}
             </Button>
           </DialogFooter>
         </DialogContent>

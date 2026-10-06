@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/LanguageProvider";
+import type { I18nKey } from "@/lib/i18n";
 
 // ---- types ----
 
@@ -89,6 +91,15 @@ const CANVAS_TEMPLATES: CanvasTemplate[] = [
 ];
 
 const CATEGORIES = ["全部", "网格", "单图"] as const;
+const TEMPLATE_TRANSLATIONS: Record<string, { title: I18nKey; description: I18nKey; prompt: I18nKey }> = {
+  multiCameraGrid: { title: "canvas.template.cameraSheet", description: "canvas.template.cameraSheetDescription", prompt: "canvas.template.cameraSheetPrompt" },
+  plotDeduction: { title: "canvas.template.storyBeats", description: "canvas.template.storyBeatsDescription", prompt: "canvas.template.storyBeatsPrompt" },
+  continuousStoryboard: { title: "canvas.template.storyboard", description: "canvas.template.storyboardDescription", prompt: "canvas.template.storyboardPrompt" },
+  characterThreeView: { title: "canvas.template.characterViews", description: "canvas.template.characterViewsDescription", prompt: "canvas.template.characterViewsPrompt" },
+  lightingCorrection: { title: "canvas.template.colorGrade", description: "canvas.template.colorGradeDescription", prompt: "canvas.template.colorGradePrompt" },
+  predictNext: { title: "canvas.template.predictNext", description: "canvas.template.predictNextDescription", prompt: "canvas.template.predictNextPrompt" },
+  predictPrevious: { title: "canvas.template.predictPrevious", description: "canvas.template.predictPreviousDescription", prompt: "canvas.template.predictPreviousPrompt" },
+};
 
 // ---- component ----
 
@@ -99,6 +110,7 @@ type CanvasTemplateDialogProps = {
 };
 
 export function CanvasTemplateDialog({ open, onOpenChange, onConfirm }: CanvasTemplateDialogProps) {
+  const { t } = useI18n();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [category, setCategory] = useState<string>("全部");
 
@@ -111,7 +123,8 @@ export function CanvasTemplateDialog({ open, onOpenChange, onConfirm }: CanvasTe
 
   const handleConfirm = () => {
     if (!selected) return;
-    onConfirm(selected);
+    const keys = TEMPLATE_TRANSLATIONS[selected.id];
+    onConfirm(keys ? { ...selected, title: t(keys.title), description: t(keys.description), prompt: t(keys.prompt) } : selected);
     setSelectedId(null);
     setCategory("全部");
   };
@@ -130,8 +143,8 @@ export function CanvasTemplateDialog({ open, onOpenChange, onConfirm }: CanvasTe
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <LayoutDashboard className="h-4 w-4" />
-            画布流程模板
-            <span className="text-xs font-normal text-muted-foreground">选择一个模板导入到画布</span>
+            {t("canvas.template.title")}
+            <span className="text-xs font-normal text-muted-foreground">{t("canvas.template.description")}</span>
           </DialogTitle>
         </DialogHeader>
 
@@ -147,7 +160,7 @@ export function CanvasTemplateDialog({ open, onOpenChange, onConfirm }: CanvasTe
                 category === cat ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted",
               )}
             >
-              {cat}
+              {cat === "全部" ? t("canvas.template.all") : cat === "网格" ? t("canvas.template.grid") : t("canvas.template.single")}
             </button>
           ))}
         </div>
@@ -158,6 +171,10 @@ export function CanvasTemplateDialog({ open, onOpenChange, onConfirm }: CanvasTe
             {filtered.map((template) => {
               const Icon = template.icon;
               const isSelected = selectedId === template.id;
+              const keys = TEMPLATE_TRANSLATIONS[template.id];
+              const title = keys ? t(keys.title) : template.title;
+              const description = keys ? t(keys.description) : template.description;
+              const prompt = keys ? t(keys.prompt) : template.prompt;
               return (
                 <div
                   key={template.id}
@@ -181,16 +198,16 @@ export function CanvasTemplateDialog({ open, onOpenChange, onConfirm }: CanvasTe
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <p className="truncate text-sm font-medium text-foreground">{template.title}</p>
+                        <p className="truncate text-sm font-medium text-foreground">{title}</p>
                         <Badge variant="outline" className="shrink-0 px-1.5 py-0.5 text-[10px]">
-                          {template.category}
+                          {template.category === "网格" ? t("canvas.template.grid") : t("canvas.template.single")}
                         </Badge>
                         {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
                       </div>
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{template.description}</p>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
                     </div>
                   </div>
-                  <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground/70">{template.prompt}</p>
+                  <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground/70">{prompt}</p>
                 </div>
               );
             })}
@@ -200,14 +217,14 @@ export function CanvasTemplateDialog({ open, onOpenChange, onConfirm }: CanvasTe
         {/* footer */}
         <div className="-mx-4 -mb-4 flex min-h-14 items-center justify-between gap-3 border-t bg-muted/50 px-4 py-3 text-xs">
           <span className="min-w-0 truncate text-muted-foreground">
-            {selected ? `将导入：${selected.title}` : `${filtered.length} 个可用模板`}
+            {selected ? t("canvas.template.willImport", { title: t(TEMPLATE_TRANSLATIONS[selected.id]?.title ?? "canvas.template.title") }) : t("canvas.template.available", { count: filtered.length })}
           </span>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => handleOpenChange(false)}>
-              取消
+              {t("canvas.cancel")}
             </Button>
             <Button size="sm" onClick={handleConfirm} disabled={!selected}>
-              导入到画布
+              {t("canvas.template.import")}
             </Button>
           </div>
         </div>

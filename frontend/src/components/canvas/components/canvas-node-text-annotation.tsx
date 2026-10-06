@@ -3,6 +3,7 @@
 import React from "react";
 
 import { type CanvasNodeData } from "../types";
+import { useI18n } from "@/components/LanguageProvider";
 
 type TextAnnotationNodeBodyProps = {
   data: CanvasNodeData;
@@ -15,6 +16,7 @@ export const TextAnnotationNodeBody = React.memo(function TextAnnotationNodeBody
   onContentChange,
   onSelectNode,
 }: TextAnnotationNodeBodyProps) {
+  const { t } = useI18n();
   const content = data.metadata?.content || "";
   const fontSize = data.metadata?.fontSize || 14;
   const bgColor = data.metadata?.backgroundColor || "";
@@ -26,7 +28,7 @@ export const TextAnnotationNodeBody = React.memo(function TextAnnotationNodeBody
         data-canvas-no-zoom
         value={content}
         onChange={(event) => onContentChange(data.id, event.target.value)}
-        placeholder="输入注释..."
+        placeholder={t("canvas.annotation.placeholder")}
         className="h-full w-full cursor-text resize-none bg-transparent px-2.5 py-1.5 pb-8 text-sm outline-none placeholder:text-muted-foreground"
         style={{
           fontSize,
@@ -40,7 +42,7 @@ export const TextAnnotationNodeBody = React.memo(function TextAnnotationNodeBody
           className="pointer-events-none absolute right-2 bottom-1 text-[10px] text-muted-foreground/60"
           data-canvas-no-zoom
         >
-          {content.length} 字
+          {t("canvas.annotation.characters", { count: content.length })}
         </div>
       )}
     </div>

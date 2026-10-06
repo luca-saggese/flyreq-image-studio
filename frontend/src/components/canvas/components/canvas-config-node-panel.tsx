@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { normalizeModel } from "@/lib/model-capabilities";
 import { CanvasMentionEditor } from "./canvas-mention-editor";
 import { Spinner } from "./canvas-ui";
+import { useI18n } from "@/components/LanguageProvider";
 import type { CanvasGenerationConfig } from "../types";
 import type { CanvasResourceReference } from "../utils/canvas-resource-references";
 
@@ -43,6 +44,7 @@ export function CanvasConfigNodePanel({
   onOptimizePrompt: () => void;
   onGenerate: () => void;
 }) {
+  const { t } = useI18n();
   const value: GenerationParamsValue = {
     model: normalizeModel(config.model),
     outputSize: config.outputSize,
@@ -73,7 +75,7 @@ export function CanvasConfigNodePanel({
   return (
     <div className="flex h-full flex-col gap-2 p-2 text-xs" onPointerDown={() => onSelect()}>
       <div className="min-h-0 flex-1 cursor-text overflow-auto rounded-lg border border-input bg-background p-1.5" data-no-drag>
-        <CanvasMentionEditor value={prompt} references={references} onChange={onPromptChange} placeholder="提示词，输入 @ 引用上游节点…" className="min-h-[56px] text-xs" />
+        <CanvasMentionEditor value={prompt} references={references} onChange={onPromptChange} placeholder={t("canvas.config.promptPlaceholder")} className="min-h-[56px] text-xs" />
       </div>
 
       <div className="shrink-0 space-y-2">
@@ -90,7 +92,7 @@ export function CanvasConfigNodePanel({
               onClick={onOptimizePrompt}
               disabled={busy || optimizing || !prompt.trim()}
               className="shrink-0 gap-1"
-              title="优化提示词（结合连接的上游图片/文字）"
+              title={t("canvas.config.optimizePrompt")}
             >
               {optimizing ? <Spinner className="size-3.5" /> : <Wand2 className="size-3.5" />}
             </Button>
@@ -100,22 +102,22 @@ export function CanvasConfigNodePanel({
             size="xs"
             onClick={onToggleLock}
             className={cn("flex-1 gap-1", lockResultNodes && "border-primary text-primary")}
-            title={lockResultNodes ? "已锁定：结果直接覆盖连接的图片节点" : "未锁定：每次生成新建结果图片节点"}
+            title={lockResultNodes ? t("canvas.config.locked") : t("canvas.config.unlocked")}
           >
             {lockResultNodes ? <Lock className="size-3" /> : <LockOpen className="size-3" />}
-            <span className="text-[11px]">{lockResultNodes ? "将覆盖已有结果节点" : "将新建结果节点"}</span>
+            <span className="text-[11px]">{lockResultNodes ? t("canvas.config.overwriteResults") : t("canvas.config.createResults")}</span>
           </Button>
           <Button size="sm" onClick={onGenerate} disabled={busy || referenceLimit.exceeded} className="flex-1">
             {busy ? <Spinner className="size-4" /> : <Sparkles className="size-4" />}
-            生成
+            {t("canvas.config.generate")}
           </Button>
         </div>
         <div className="flex items-center justify-between gap-2 text-[11px] leading-tight">
           <span className={cn("min-w-0 truncate", referenceLimit.exceeded ? "text-destructive" : "text-muted-foreground")}>
-            当前模型允许参考图数量：{referenceLimit.max}
+            {t("canvas.config.maxReferenceImages", { count: referenceLimit.max })}
           </span>
           <span className={cn("shrink-0", referenceLimit.exceeded ? "text-destructive" : "text-muted-foreground")}>
-            {referenceLimit.exceeded ? "参考图超过模型限制" : `已连接 ${referenceLimit.imageCount} 张`}
+            {referenceLimit.exceeded ? t("canvas.config.tooManyReferences") : t("canvas.config.connectedImages", { count: referenceLimit.imageCount })}
           </span>
         </div>
       </div>

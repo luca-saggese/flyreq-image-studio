@@ -5,6 +5,7 @@ import { AlertCircle, Clock, FileText, Hash, Images, RefreshCw, Save, Sparkles, 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { useI18n } from "@/components/LanguageProvider";
 import { cn } from "@/lib/utils";
 import { canvasTheme } from "../lib/canvas-theme";
 import { formatBytes } from "../lib/image-utils";
@@ -15,13 +16,6 @@ import { TextAnnotationNodeBody } from "./canvas-node-text-annotation";
 export type ResizeCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 const RETRY_COOLDOWN_MS = 3000;
-
-const STATUS_LABELS: Record<string, string> = {
-  submitting: "提交中…",
-  queued: "排队中",
-  processing: "生成中",
-  loading: "加载中",
-};
 
 type CanvasNodeProps = {
   data: CanvasNodeData;
@@ -78,6 +72,7 @@ export const CanvasNode = React.memo(function CanvasNode({
   onToggleRenderMode,
   renderPanel,
 }: CanvasNodeProps) {
+  const { t } = useI18n();
   const theme = canvasTheme;
   const status = data.metadata?.status ?? "idle";
   const borderColor = referenceLimitExceeded ? "var(--destructive)" : isSelected || isConnectionTarget ? theme.node.activeStroke : isRelated ? theme.node.muted : theme.node.stroke;
@@ -128,7 +123,7 @@ export const CanvasNode = React.memo(function CanvasNode({
       {/* 连接手柄：选中常驻 / 悬停显示，命中区域更大 */}
       <button
         type="button"
-        aria-label="连接输出"
+        aria-label={t("canvas.node.connectOutput")}
         className={cn(
           "absolute top-1/2 -right-3.5 grid size-7 -translate-y-1/2 place-items-center transition-opacity",
           isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
@@ -142,7 +137,7 @@ export const CanvasNode = React.memo(function CanvasNode({
       </button>
       <button
         type="button"
-        aria-label="连接输入"
+        aria-label={t("canvas.node.connectInput")}
         className={cn(
           "absolute top-1/2 -left-3.5 grid size-7 -translate-y-1/2 place-items-center transition-opacity",
           isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
@@ -203,6 +198,7 @@ function ImageNodeBody({
   onRefreshProgress?: (node: CanvasNodeData) => void | Promise<void>;
   onOpenImage?: (node: CanvasNodeData) => void;
 }) {
+  const { t } = useI18n();
   const fallbackContent = data.metadata?.content;
   // 不渲染刷新后失效的 blob: URL（避免 ERR_FILE_NOT_FOUND）；由上层 imageUrl（storageKey 解析）提供有效地址
   const url = imageUrl || (fallbackContent && !fallbackContent.startsWith("blob:") ? fallbackContent : undefined);
@@ -220,13 +216,13 @@ function ImageNodeBody({
       {!url && !isGenerating && !isError && (
         <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-3 text-center text-muted-foreground" data-canvas-no-zoom>
           <Images className="size-6 opacity-70" />
-          <p className="max-w-[15rem] text-[11px] leading-snug">该节点可作为参考图或目标图节点</p>
+          <p className="max-w-[15rem] text-[11px] leading-snug">{t("canvas.node.imageHint")}</p>
           <div className="mt-1 flex flex-row items-center justify-center gap-2">
             <button type="button" className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted" onClick={() => onUploadToNode?.(data.id)}>
-              <Upload className="size-3.5" /> 上传图片
+              <Upload className="size-3.5" /> {t("canvas.node.uploadImage")}
             </button>
             <button type="button" className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted" onClick={() => onImportToNode?.(data.id)}>
-              <Images className="size-3.5" /> 从素材库导入
+              <Images className="size-3.5" /> {t("canvas.node.importImage")}
             </button>
           </div>
         </div>
@@ -236,7 +232,7 @@ function ImageNodeBody({
       {isError && (
         <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-3 text-center" data-canvas-no-zoom onPointerDown={(event) => event.stopPropagation()}>
           <AlertCircle className="size-6 text-destructive" />
-          <span className="line-clamp-3 text-xs text-destructive">{data.metadata?.errorDetails || "生成失败"}</span>
+          <span className="line-clamp-3 text-xs text-destructive">{data.metadata?.errorDetails || t("canvas.node.generationFailed")}</span>
           {onRetry && (
             <RetryButton onRetry={() => onRetry(data)} />
           )}
@@ -251,12 +247,12 @@ function ImageNodeBody({
         <button
           type="button"
           data-canvas-no-zoom
-          title="存入我的素材"
+          title={t("canvas.node.saveToAssets")}
           className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 rounded-md bg-black/55 px-1.5 py-1 text-[10px] text-white opacity-0 transition-opacity hover:bg-black/70 group-hover:opacity-100"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => onSaveToAssets(data)}
         >
-          <Save className="size-3.5" /> 存素材
+          <Save className="size-3.5" /> {t("canvas.node.saveAsset")}
         </button>
       )}
 
@@ -272,6 +268,7 @@ function ImageNodeBody({
 
 /** 生成状态 overlay：显示状态、用时、任务 ID。 */
 function GenerationStatusOverlay({ data, status, onRefreshProgress }: { data: CanvasNodeData; status: string; onRefreshProgress?: (node: CanvasNodeData) => void | Promise<void> }) {
+  const { t } = useI18n();
   const startedAt = data.metadata?.generationStartedAt;
   const taskId = data.metadata?.generationTaskId;
   const [elapsed, setElapsed] = useState(() => (startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0));
@@ -291,7 +288,7 @@ function GenerationStatusOverlay({ data, status, onRefreshProgress }: { data: Ca
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/70 p-3 backdrop-blur-sm" data-canvas-no-zoom onPointerDown={(event) => event.stopPropagation()}>
       <Spinner className="size-5 text-primary" />
-      <span className="text-xs font-medium text-foreground">{STATUS_LABELS[status] || "生成中"}</span>
+      <span className="text-xs font-medium text-foreground">{t("canvas.node.status." + (status in { submitting: 1, queued: 1, processing: 1, loading: 1 } ? status : "generating") as "canvas.node.status.submitting")}</span>
       {startedAt && (
         <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
           <Clock className="size-3" /> {formatElapsed(elapsed)}
@@ -313,7 +310,7 @@ function GenerationStatusOverlay({ data, status, onRefreshProgress }: { data: Ca
           }}
         >
           <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
-          获取当前进度
+          {t("canvas.node.refreshProgress")}
         </button>
       )}
     </div>
@@ -322,6 +319,7 @@ function GenerationStatusOverlay({ data, status, onRefreshProgress }: { data: Ca
 
 /** 重试按钮（带 3s 冷却防连点）。 */
 function RetryButton({ onRetry }: { onRetry: () => void }) {
+  const { t } = useI18n();
   const [cooldown, setCooldown] = useState(0);
 
   const handleClick = () => {
@@ -348,7 +346,7 @@ function RetryButton({ onRetry }: { onRetry: () => void }) {
       disabled={cooldown > 0}
     >
       <RefreshCw className={cn("size-3.5", cooldown > 0 && "animate-spin")} />
-      {cooldown > 0 ? `${cooldown}s` : "重新生成"}
+      {cooldown > 0 ? `${cooldown}s` : t("canvas.node.retry")}
     </button>
   );
 }
@@ -370,6 +368,7 @@ function TextNodeBody({
   onAiGenerate?: (nodeId: string) => void;
   onToggleRenderMode?: (nodeId: string) => void;
 }) {
+  const { t } = useI18n();
   const content = data.metadata?.content || "";
   const isMarkdown = data.metadata?.renderMode === "markdown";
 
@@ -385,7 +384,7 @@ function TextNodeBody({
           {content.trim() ? (
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
           ) : (
-            <span className="text-muted-foreground">Markdown 预览为空</span>
+            <span className="text-muted-foreground">{t("canvas.node.markdownEmpty")}</span>
           )}
         </div>
       ) : (
@@ -393,7 +392,7 @@ function TextNodeBody({
           data-canvas-no-zoom
           value={content}
           onChange={(event) => onContentChange(data.id, event.target.value)}
-          placeholder="输入文本…"
+          placeholder={t("canvas.node.textPlaceholder")}
           className="h-full w-full cursor-text resize-none bg-transparent px-2.5 py-1.5 pb-9 text-sm outline-none placeholder:text-muted-foreground"
           style={{ fontSize: data.metadata?.fontSize || 14 }}
           onPointerDown={() => onSelectNode(data.id)}
@@ -404,7 +403,7 @@ function TextNodeBody({
         {onToggleRenderMode && (
           <button
             type="button"
-            title={isMarkdown ? "切换为纯文本" : "切换为 Markdown 预览"}
+            title={isMarkdown ? t("canvas.node.plainText") : t("canvas.node.markdownPreview")}
             className="inline-flex items-center justify-center rounded-md bg-background/90 p-1 text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => onToggleRenderMode(data.id)}
@@ -415,7 +414,7 @@ function TextNodeBody({
         {onAiGenerate && (
           <button
             type="button"
-            title="AI 生成文本"
+            title={t("canvas.node.aiGenerateText")}
             className="inline-flex items-center justify-center rounded-md bg-background/90 p-1 text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => onAiGenerate(data.id)}
@@ -425,7 +424,7 @@ function TextNodeBody({
         )}
         <button
           type="button"
-          title="导入提示词素材"
+          title={t("canvas.node.importPromptAsset")}
           className="inline-flex items-center justify-center rounded-md bg-background/90 p-1 text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground"
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => onImportTextToNode?.(data.id)}
@@ -435,7 +434,7 @@ function TextNodeBody({
         {content.trim() && (
           <button
             type="button"
-            title="存为提示词素材"
+            title={t("canvas.node.savePromptAsset")}
             className="inline-flex items-center justify-center rounded-md bg-background/90 p-1 text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => onSaveTextToAssets?.(data)}

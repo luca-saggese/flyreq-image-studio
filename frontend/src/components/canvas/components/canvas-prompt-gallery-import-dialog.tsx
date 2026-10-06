@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ALL_CATEGORY, DEFAULT_CATEGORIES, PROMPT_DATA_SOURCES, fetchAllPromptSources, getPromptSourceLabel, type PromptWithKey } from "@/lib/prompt-gallery-data";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/LanguageProvider";
 
 type CanvasPromptGalleryImportDialogProps = {
   open: boolean;
@@ -73,6 +74,7 @@ function matchesPrompt(prompt: PromptWithKey, query: string) {
 }
 
 export function CanvasPromptGalleryImportDialog({ open, importing, onOpenChange, onConfirm }: CanvasPromptGalleryImportDialogProps) {
+  const { t } = useI18n();
   const [prompts, setPrompts] = useState<PromptWithKey[]>([]);
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [blacklist, setBlacklist] = useState<string[]>([]);
@@ -108,13 +110,13 @@ export function CanvasPromptGalleryImportDialog({ open, importing, onOpenChange,
           setBlacklist(data.blacklist);
         })
         .catch((err) => {
-          setError(err instanceof Error ? err.message : "提示词广场加载失败");
+          setError(err instanceof Error ? err.message : t("canvas.gallery.loadFailed"));
         })
         .finally(() => {
           setLoading(false);
         });
     }
-  }, [open]);
+  }, [open, t]);
 
   const filteredPrompts = useMemo(() => {
     return prompts.filter((prompt) => {
@@ -162,9 +164,9 @@ export function CanvasPromptGalleryImportDialog({ open, importing, onOpenChange,
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <LibraryBig className="h-4 w-4" />
-            从提示词广场导入
+            {t("canvas.gallery.title")}
             <span className="text-xs font-normal text-muted-foreground">
-              {selectedPrompt ? "已选 1 / 1" : "选择 1 个模板"}
+              {selectedPrompt ? t("canvas.gallery.selection", { count: 1 }) : t("canvas.gallery.chooseOne")}
             </span>
           </DialogTitle>
         </DialogHeader>
@@ -176,7 +178,7 @@ export function CanvasPromptGalleryImportDialog({ open, importing, onOpenChange,
               type="text"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索提示词、标题、标签或来源"
+              placeholder={t("canvas.gallery.searchPlaceholder")}
               className="h-8 w-full rounded-md border border-input bg-background pr-8 pl-8 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
             />
             {query && (
@@ -184,18 +186,18 @@ export function CanvasPromptGalleryImportDialog({ open, importing, onOpenChange,
                 type="button"
                 onClick={() => setQuery("")}
                 className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                title="清空搜索"
+                title={t("common.clearSearch")}
               >
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={importing}>
-            取消
+            {t("canvas.cancel")}
           </Button>
           <Button size="sm" onClick={handleConfirm} disabled={!selectedPrompt || importing}>
             {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            导入到画布
+            {t("canvas.gallery.importToCanvas")}
           </Button>
         </div>
 
@@ -227,7 +229,7 @@ export function CanvasPromptGalleryImportDialog({ open, importing, onOpenChange,
         ) : filteredPrompts.length === 0 ? (
           <div className="flex min-h-64 flex-col items-center justify-center gap-2 text-muted-foreground">
             <LibraryBig className="h-8 w-8 opacity-50" />
-            <p className="text-sm">没有匹配的提示词模板</p>
+            <p className="text-sm">{t("canvas.gallery.noResults")}</p>
           </div>
         ) : (
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto pr-1">
@@ -256,15 +258,15 @@ export function CanvasPromptGalleryImportDialog({ open, importing, onOpenChange,
 
         <div className="-mx-4 -mb-4 flex min-h-14 items-center justify-between gap-3 border-t bg-muted/50 px-4 py-3 text-xs">
           <span className="min-w-0 truncate text-muted-foreground">
-            {selectedPrompt ? `将导入：${selectedPrompt.title}` : `找到 ${filteredPrompts.length} 个提示词模板`}
+            {selectedPrompt ? t("canvas.gallery.willImport", { title: selectedPrompt.title }) : t("canvas.gallery.results", { count: filteredPrompts.length })}
           </span>
           <Popover>
             <PopoverTrigger className="inline-flex shrink-0 items-center gap-1 text-muted-foreground transition-colors hover:text-foreground">
-              <span>提示词来源</span>
+              <span>{t("canvas.gallery.sources")}</span>
               <ExternalLink className="h-3 w-3" />
             </PopoverTrigger>
             <PopoverContent align="end" className="w-72 p-2">
-              <p className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">提示词来源（{PROMPT_DATA_SOURCES.length}）</p>
+              <p className="px-2 pb-1.5 text-xs font-medium text-muted-foreground">{t("canvas.gallery.sourceCount", { count: PROMPT_DATA_SOURCES.length })}</p>
               <div className="space-y-0.5">
                 {PROMPT_DATA_SOURCES.map((source) => (
                   <a
@@ -300,6 +302,7 @@ function PromptImportCard({
   onSelect: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useI18n();
   const image = prompt.images[0];
 
   return (
@@ -355,11 +358,11 @@ function PromptImportCard({
                 </Badge>
               ))
             ) : (
-              <span className="text-[11px] text-muted-foreground">无标签</span>
+              <span className="text-[11px] text-muted-foreground">{t("canvas.gallery.noTags")}</span>
             )}
           </div>
           <div className="mt-auto flex items-center justify-between gap-2">
-            <span className="truncate text-[11px] text-muted-foreground">{prompt.contributor || prompt.source || "未知来源"}</span>
+            <span className="truncate text-[11px] text-muted-foreground">{prompt.contributor || prompt.source || t("canvas.gallery.unknownSource")}</span>
             <Button
               type="button"
               size="xs"
@@ -371,7 +374,7 @@ function PromptImportCard({
               disabled={importing}
               className="shrink-0"
             >
-              导入
+              {t("common.import")}
             </Button>
           </div>
         </div>

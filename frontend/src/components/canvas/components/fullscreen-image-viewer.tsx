@@ -5,6 +5,7 @@ import { Copy, Download, ImagePlus, Maximize2, Wand2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { runImageAction, type ImageActionPayload } from "@/lib/image-actions";
+import { useI18n } from "@/components/LanguageProvider";
 
 interface FullscreenImageViewerProps {
   src: string;
@@ -17,6 +18,7 @@ interface FullscreenImageViewerProps {
  * 全屏图片查看器（rAF 批量变换 + 复制/素材库/图生图参考）。
  */
 export function FullscreenImageViewer({ src, title, onClose, actionPayload }: FullscreenImageViewerProps) {
+  const { t } = useI18n();
   const imageRef = useRef<HTMLImageElement>(null);
   const frameRef = useRef<number | null>(null);
   const scaleRef = useRef(1);
@@ -101,38 +103,38 @@ export function FullscreenImageViewer({ src, title, onClose, actionPayload }: Fu
     >
       {/* 顶部标题栏 */}
       <div className="absolute top-0 left-0 right-0 z-20 flex h-12 items-center justify-between border-b border-border bg-background/95 backdrop-blur-sm px-4">
-        <span className="text-sm font-medium text-foreground">{title || "图片查看"}</span>
-        <Button variant="ghost" size="icon" onClick={onClose} title="关闭">
+        <span className="text-sm font-medium text-foreground">{title || t("canvas.fullscreen.imageView")}</span>
+        <Button variant="ghost" size="icon" onClick={onClose} title={t("canvas.fullscreen.close")}>
           <X className="h-5 w-5" />
         </Button>
       </div>
 
       {/* 底部缩放控件 */}
       <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full bg-background/90 px-2 py-1.5 shadow-lg ring-1 ring-border backdrop-blur-sm">
-        <button onClick={zoomOut} className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" title="缩小">
+        <button onClick={zoomOut} className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" title={t("canvas.fullscreen.zoomOut")}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3M8 11h6" /></svg>
         </button>
         <span className="min-w-[44px] text-center text-xs tabular-nums text-muted-foreground">{Math.round(scaleState * 100)}%</span>
-        <button onClick={zoomIn} className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" title="放大">
+        <button onClick={zoomIn} className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" title={t("canvas.fullscreen.zoomIn")}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3M11 8v6M8 11h6" /></svg>
         </button>
         <div className="mx-1 h-4 w-px bg-border" />
-        <button onClick={resetView} className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" title="重置视图">
+        <button onClick={resetView} className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" title={t("canvas.zoom.reset")}>
           <Maximize2 className="w-4 h-4" />
         </button>
         <div className="mx-1 h-4 w-px bg-border" />
-        <button onClick={() => { if (actionPayload) void runImageAction('download', actionPayload); }} className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" title="下载">
+        <button onClick={() => { if (actionPayload) void runImageAction('download', actionPayload); }} className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" title={t("canvas.fullscreen.download")}>
           <Download className="w-4 h-4" />
         </button>
         {actionPayload && (
           <>
-            <button onClick={() => void runImageAction('copy', actionPayload)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" title="复制图片">
+            <button onClick={() => void runImageAction('copy', actionPayload)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" title={t("canvas.fullscreen.copy")}>
               <Copy className="w-4 h-4" />
             </button>
-            <button onClick={() => void runImageAction('add-to-assets', actionPayload)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" title="添加到素材库">
+            <button onClick={() => void runImageAction('add-to-assets', actionPayload)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" title={t("canvas.fullscreen.addAsset")}>
               <ImagePlus className="w-4 h-4" />
             </button>
-            <button onClick={() => void runImageAction('use-as-reference', actionPayload)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" title="作为图生图参考">
+            <button onClick={() => void runImageAction('use-as-reference', actionPayload)} className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground" title={t("canvas.fullscreen.useReference")}>
               <Wand2 className="w-4 h-4" />
             </button>
           </>

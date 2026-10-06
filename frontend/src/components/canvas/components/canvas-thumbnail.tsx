@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { computeMinimapLayout } from "../utils/canvas-minimap-layout";
+import { useI18n } from "@/components/LanguageProvider";
 import { CanvasNodeType, type CanvasNodeData } from "../types";
 
 const THUMB_W = 300;
@@ -9,12 +10,13 @@ const THUMB_H = 200;
 
 /** 列表卡片用的静态缩略图：复用小地图的极简彩色矩形渲染；空画布占位但尺寸不变。 */
 export function CanvasThumbnail({ nodes, className }: { nodes: CanvasNodeData[]; className?: string }) {
+  const { t } = useI18n();
   const boxClass = cn("relative aspect-[3/2] w-full overflow-hidden rounded-xl border border-border bg-muted/40", className);
 
   if (!nodes.length) {
     return (
       <div className={boxClass}>
-        <div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">画布为空</div>
+        <div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">{t("canvas.thumbnail.empty")}</div>
       </div>
     );
   }

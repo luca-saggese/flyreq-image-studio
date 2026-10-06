@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/LanguageProvider";
 import { CanvasEditor } from "./CanvasEditor";
 import { CanvasThumbnail } from "./components/canvas-thumbnail";
 import { useCanvasStore } from "./stores/use-canvas-store";
@@ -21,17 +22,12 @@ type CanvasWorkspaceProps = {
 
 type SortMode = "updated" | "created" | "name";
 
-const SORT_OPTIONS: { value: SortMode; label: string }[] = [
-  { value: "updated", label: "最近修改" },
-  { value: "created", label: "创建时间" },
-  { value: "name", label: "名称" },
-];
-
 /** 渲染无限画布项目列表或当前画布编辑器。
  * @param props 画布配置、API Key 配置回调及提示消息回调。
  * @returns 画布工作区界面。
  */
 export function CanvasWorkspace({ onConfigureApiKey, showToast, showPromptGallery }: CanvasWorkspaceProps) {
+  const { locale, t } = useI18n();
   const hydrated = useCanvasStore((state) => state.hydrated);
   const projects = useCanvasStore((state) => state.projects);
   const createProject = useCanvasStore((state) => state.createProject);
@@ -46,6 +42,11 @@ export function CanvasWorkspace({ onConfigureApiKey, showToast, showPromptGaller
   const [sortMode, setSortMode] = useState<SortMode>("updated");
   const [mounted, setMounted] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const sortOptions: { value: SortMode; label: string }[] = [
+    { value: "updated", label: t("canvas.sort.updated") },
+    { value: "created", label: t("canvas.sort.created") },
+    { value: "name", label: t("canvas.sort.name") },
+  ];
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setMounted(true));
@@ -54,11 +55,11 @@ export function CanvasWorkspace({ onConfigureApiKey, showToast, showPromptGaller
 
   const sortedProjects = useMemo(() => {
     const list = [...projects];
-    if (sortMode === "name") list.sort((a, b) => a.title.localeCompare(b.title, "zh"));
+    if (sortMode === "name") list.sort((a, b) => a.title.localeCompare(b.title, locale));
     else if (sortMode === "created") list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     else list.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     return list;
-  }, [projects, sortMode]);
+  }, [locale, projects, sortMode]);
 
   if (activeProjectId) {
     return (
@@ -72,9 +73,9 @@ export function CanvasWorkspace({ onConfigureApiKey, showToast, showPromptGaller
     try {
       const imported = await importCanvasProjectsFromZip(file);
       imported.forEach((project) => importProject(project));
-      showToast(`已导入 ${imported.length} 个画布`, "success");
+      showToast(t("canvas.imported", { count: imported.length }), "success");
     } catch {
-      showToast("导入失败，请确认是导出的画布 zip", "error");
+      showToast(t("canvas.importFailed"), "error");
     }
   };
 
@@ -82,27 +83,27 @@ export function CanvasWorkspace({ onConfigureApiKey, showToast, showPromptGaller
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">无限画布</h2>
-          <p className="text-xs text-muted-foreground">节点式画布生图 · 连线引用 · 生成走任务队列</p>
+          <h2 className="text-lg font-semibold tracking-tight">{t("canvas.workspaceTitle")}</h2>
+          <p className="text-xs text-muted-foreground">{t("canvas.workspaceDescription")}</p>
         </div>
         <div className="flex items-center gap-2">
           {projects.length > 0 && (
-            <Select<SortMode> value={sortMode} onValueChange={setSortMode} options={SORT_OPTIONS} size="sm" contentClassName="min-w-32" />
+            <Select<SortMode> value={sortMode} onValueChange={setSortMode} options={sortOptions} size="sm" contentClassName="min-w-32" />
           )}
           <input ref={importInputRef} type="file" accept=".zip" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleImport(file); event.target.value = ""; }} />
           <Button variant="outline" size="sm" onClick={() => importInputRef.current?.click()}>
             <Upload className="size-4" />
-            导入
+            {t("canvas.import")}
           </Button>
           <Button size="sm" onClick={() => setActiveProjectId(createProject())}>
             <Plus className="size-4" />
-            新建画布
+            {t("canvas.new")}
           </Button>
         </div>
       </div>
 
       {!mounted || !hydrated ? (
-        <div className="grid place-items-center rounded-2xl border border-dashed border-border py-16 text-sm text-muted-foreground">加载中…</div>
+        <div className="grid place-items-center rounded-2xl border border-dashed border-border py-16 text-sm text-muted-foreground">{t("canvas.loading")}</div>
       ) : projects.length === 0 ? (
         <button
           type="button"
@@ -110,13 +111,13 @@ export function CanvasWorkspace({ onConfigureApiKey, showToast, showPromptGaller
           className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-16 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
         >
           <Layers className="size-8" />
-          还没有画布，点击新建第一个
+          {t("canvas.empty")}
         </button>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {sortedProjects.map((project) => (
             <div key={project.id} className={cn("group flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-sm transition-colors hover:border-primary/40")}>
-              <button type="button" className="block w-full" aria-label="打开画布" onClick={() => setActiveProjectId(project.id)}>
+              <button type="button" className="block w-full" aria-label={t("canvas.openAria")} onClick={() => setActiveProjectId(project.id)}>
                 <CanvasThumbnail nodes={project.nodes} />
               </button>
 
@@ -131,23 +132,23 @@ export function CanvasWorkspace({ onConfigureApiKey, showToast, showPromptGaller
                   <Input autoFocus value={editingTitle} onChange={(event) => setEditingTitle(event.target.value)} onBlur={() => { renameProject(project.id, editingTitle); setEditingId(null); }} />
                 </form>
               ) : (
-                <button type="button" className="w-full rounded-md text-left transition-colors hover:text-primary" title="点击重命名" onClick={() => { setEditingId(project.id); setEditingTitle(project.title); }}>
+                <button type="button" className="w-full rounded-md text-left transition-colors hover:text-primary" title={t("canvas.rename")} onClick={() => { setEditingId(project.id); setEditingTitle(project.title); }}>
                   <span className="line-clamp-1 font-medium">{project.title}</span>
                 </button>
               )}
 
               <p className="text-xs text-muted-foreground">
-                {project.nodes.length} 个节点 · {new Date(project.updatedAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                {t("canvas.nodes", { count: project.nodes.length })} · {new Date(project.updatedAt).toLocaleString(locale === "zh" ? "zh-CN" : "en-US", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
               </p>
               <div className="flex items-center gap-1">
                 <Button variant="secondary" size="sm" className="flex-1" onClick={() => setActiveProjectId(project.id)}>
                   <FolderOpen className="size-4" />
-                  打开
+                  {t("canvas.open")}
                 </Button>
-                <Button variant="ghost" size="icon-sm" aria-label="导出" onClick={() => void exportCanvasProjects([project], project.title || "无限画布")}>
+                <Button variant="ghost" size="icon-sm" aria-label={t("canvas.export")} onClick={() => void exportCanvasProjects([project], project.title || t("canvas.workspaceTitle"))}>
                   <Download className="size-4" />
                 </Button>
-                <Button variant="ghost" size="icon-sm" aria-label="删除" onClick={() => setDeleteId(project.id)}>
+                <Button variant="ghost" size="icon-sm" aria-label={t("canvas.delete")} onClick={() => setDeleteId(project.id)}>
                   <Trash2 className="size-4" />
                 </Button>
               </div>
@@ -159,12 +160,12 @@ export function CanvasWorkspace({ onConfigureApiKey, showToast, showPromptGaller
       <Dialog open={Boolean(deleteId)} onOpenChange={(open) => !open && setDeleteId(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>删除画布</DialogTitle>
+            <DialogTitle>{t("canvas.deleteTitle")}</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">删除后无法恢复（图片也会从本地清理）。确定删除该画布吗？</p>
+          <p className="text-sm text-muted-foreground">{t("canvas.deleteDescription")}</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteId(null)}>
-              取消
+              {t("canvas.cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -173,7 +174,7 @@ export function CanvasWorkspace({ onConfigureApiKey, showToast, showPromptGaller
                 setDeleteId(null);
               }}
             >
-              删除
+              {t("canvas.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

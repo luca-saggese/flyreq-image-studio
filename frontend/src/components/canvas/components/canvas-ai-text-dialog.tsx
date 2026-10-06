@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/LanguageProvider";
 
 type AiTextGenerateDialogProps = {
   open: boolean;
@@ -31,6 +32,7 @@ export function AiTextGenerateDialog({
   onAccept,
   onCancel,
 }: AiTextGenerateDialogProps) {
+  const { t } = useI18n();
   const [prompt, setPrompt] = useState("");
 
   const handleCancel = () => {
@@ -61,7 +63,7 @@ export function AiTextGenerateDialog({
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            AI 文本生成
+            {t("canvas.aiText.title")}
             {loading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
           </DialogTitle>
         </DialogHeader>
@@ -76,7 +78,7 @@ export function AiTextGenerateDialog({
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
               <label htmlFor="ai-prompt" className="text-xs font-medium text-muted-foreground">
-                输入生成提示词
+                {t("canvas.aiText.promptLabel")}
               </label>
               <Textarea
                 id="ai-prompt"
@@ -88,19 +90,19 @@ export function AiTextGenerateDialog({
                     handleGenerate();
                   }
                 }}
-                placeholder="描述你想要生成的文本内容..."
+                placeholder={t("canvas.aiText.promptPlaceholder")}
                 className="max-h-[300px] min-h-[120px] resize-none"
                 disabled={loading}
               />
-              <p className="text-[10px] text-muted-foreground">按 Ctrl + Enter 快速提交</p>
+              <p className="text-[10px] text-muted-foreground">{t("canvas.aiText.shortcut")}</p>
             </div>
 
             <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
               <Button variant="ghost" onClick={handleCancel} disabled={loading}>
-                取消
+                {t("canvas.cancel")}
               </Button>
               <Button onClick={handleGenerate} disabled={loading || !prompt.trim()}>
-                {loading ? "生成中..." : "开始生成"}
+                {loading ? t("canvas.aiText.generating") : t("canvas.aiText.start")}
               </Button>
             </div>
           </div>
@@ -108,14 +110,14 @@ export function AiTextGenerateDialog({
           <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-muted-foreground">原始内容</span>
+                <span className="text-xs font-medium text-muted-foreground">{t("canvas.aiText.original")}</span>
                 <div className="max-h-[300px] min-h-[120px] overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm leading-relaxed text-foreground/80">
-                  {originalContent || <span className="text-muted-foreground italic">（空）</span>}
+                  {originalContent || <span className="text-muted-foreground italic">{t("canvas.aiText.empty")}</span>}
                 </div>
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-primary">生成结果</span>
+                <span className="text-xs font-medium text-primary">{t("canvas.aiText.result")}</span>
                 <div
                   className={cn(
                     "max-h-[300px] min-h-[120px] overflow-y-auto whitespace-pre-wrap rounded-lg border px-3 py-2.5 text-sm leading-relaxed",
@@ -134,10 +136,10 @@ export function AiTextGenerateDialog({
 
             <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
               <Button variant="ghost" onClick={handleCancel} disabled={loading}>
-                取消
+                {t("canvas.cancel")}
               </Button>
               <Button onClick={handleAccept} disabled={loading || !generatedContent || !!error}>
-                接受生成结果
+                {t("canvas.aiText.accept")}
               </Button>
             </div>
           </>

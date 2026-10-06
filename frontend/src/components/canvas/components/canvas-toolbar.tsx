@@ -7,6 +7,7 @@ import { Segmented } from "@/components/ui/toggle-group";
 import { Switch } from "@/components/ui/switch";
 import type { CanvasBackgroundMode } from "../lib/canvas-theme";
 import { CanvasTooltip } from "./canvas-ui";
+import { useI18n } from "@/components/LanguageProvider";
 
 type CanvasToolbarProps = {
   selectedCount: number;
@@ -47,54 +48,55 @@ export function CanvasToolbar({
   onBackgroundModeChange,
   onShowImageInfoChange,
 }: CanvasToolbarProps) {
+  const { t } = useI18n();
   return (
     <div
       data-canvas-no-zoom
       className="absolute top-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-border bg-card/95 px-2 py-1.5 shadow-lg backdrop-blur"
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <CanvasTooltip label="添加图片节点">
-        <Button variant="ghost" size="icon-sm" onClick={onAddImage} aria-label="添加图片节点">
+      <CanvasTooltip label={t("canvas.toolbar.addImage")}>
+        <Button variant="ghost" size="icon-sm" onClick={onAddImage} aria-label={t("canvas.toolbar.addImage")}>
           <ImageIcon className="size-4" />
         </Button>
       </CanvasTooltip>
-      <CanvasTooltip label="添加文本节点">
-        <Button variant="ghost" size="icon-sm" onClick={onAddText} aria-label="添加文本节点">
+      <CanvasTooltip label={t("canvas.toolbar.addText")}>
+        <Button variant="ghost" size="icon-sm" onClick={onAddText} aria-label={t("canvas.toolbar.addText")}>
           <Type className="size-4" />
         </Button>
       </CanvasTooltip>
-      <CanvasTooltip label="添加注释节点">
-        <Button variant="ghost" size="icon-sm" onClick={onAddAnnotation} aria-label="添加注释节点">
+      <CanvasTooltip label={t("canvas.toolbar.addAnnotation")}>
+        <Button variant="ghost" size="icon-sm" onClick={onAddAnnotation} aria-label={t("canvas.toolbar.addAnnotation")}>
           <Square className="size-4" />
         </Button>
       </CanvasTooltip>
-      <CanvasTooltip label="添加编排节点（提示词 + 参数 + 生成）">
-        <Button variant="ghost" size="icon-sm" onClick={onAddConfig} aria-label="添加编排节点">
+      <CanvasTooltip label={t("canvas.toolbar.addConfig")}>
+        <Button variant="ghost" size="icon-sm" onClick={onAddConfig} aria-label={t("canvas.toolbar.addConfig")}>
           <Settings2 className="size-4" />
         </Button>
       </CanvasTooltip>
       {showPromptGallery && (
-        <CanvasTooltip label="从提示词广场导入">
-          <Button variant="ghost" size="icon-sm" onClick={onImportPromptGallery} aria-label="从提示词广场导入">
+        <CanvasTooltip label={t("canvas.toolbar.importPrompt")}>
+          <Button variant="ghost" size="icon-sm" onClick={onImportPromptGallery} aria-label={t("canvas.toolbar.importPrompt")}>
             <LibraryBig className="size-4" />
           </Button>
         </CanvasTooltip>
       )}
-      <CanvasTooltip label="画布流程模板">
-        <Button variant="ghost" size="icon-sm" onClick={onOpenTemplate} aria-label="画布流程模板">
+      <CanvasTooltip label={t("canvas.toolbar.templates")}>
+        <Button variant="ghost" size="icon-sm" onClick={onOpenTemplate} aria-label={t("canvas.toolbar.templates")}>
           <LayoutDashboard className="size-4" />
         </Button>
       </CanvasTooltip>
 
       <div className="mx-1 h-5 w-px bg-border" />
 
-      <CanvasTooltip label="撤销">
-        <Button variant="ghost" size="icon-sm" disabled={!canUndo} onClick={onUndo} aria-label="撤销">
+      <CanvasTooltip label={t("canvas.toolbar.undo")}>
+        <Button variant="ghost" size="icon-sm" disabled={!canUndo} onClick={onUndo} aria-label={t("canvas.toolbar.undo")}>
           <Undo2 className="size-4" />
         </Button>
       </CanvasTooltip>
-      <CanvasTooltip label="重做">
-        <Button variant="ghost" size="icon-sm" disabled={!canRedo} onClick={onRedo} aria-label="重做">
+      <CanvasTooltip label={t("canvas.toolbar.redo")}>
+        <Button variant="ghost" size="icon-sm" disabled={!canRedo} onClick={onRedo} aria-label={t("canvas.toolbar.redo")}>
           <Redo2 className="size-4" />
         </Button>
       </CanvasTooltip>
@@ -105,13 +107,13 @@ export function CanvasToolbar({
         value={backgroundMode}
         onChange={onBackgroundModeChange}
         options={[
-          { value: "lines", icon: <Grid2x2 />, title: "网格" },
-          { value: "dots", icon: <CircleDot />, title: "圆点" },
-          { value: "blank", icon: <Square />, title: "空白" },
+          { value: "lines", icon: <Grid2x2 />, title: t("canvas.toolbar.grid") },
+          { value: "dots", icon: <CircleDot />, title: t("canvas.toolbar.dots") },
+          { value: "blank", icon: <Square />, title: t("canvas.toolbar.blank") },
         ]}
       />
 
-      <CanvasTooltip label="显示图片信息">
+      <CanvasTooltip label={t("canvas.toolbar.imageInfo")}>
         <label className="ml-1 flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground">
           <Info className="size-3.5" />
           <Switch checked={showImageInfo} onCheckedChange={onShowImageInfoChange} />
@@ -121,8 +123,8 @@ export function CanvasToolbar({
       {selectedCount > 0 && (
         <>
           <div className="mx-1 h-5 w-px bg-border" />
-          <CanvasTooltip label={`删除选中（${selectedCount}）`}>
-            <Button variant="destructive" size="icon-sm" onClick={onDelete} aria-label="删除选中">
+          <CanvasTooltip label={t("canvas.toolbar.deleteSelected", { count: selectedCount })}>
+            <Button variant="destructive" size="icon-sm" onClick={onDelete} aria-label={t("canvas.toolbar.deleteSelected", { count: selectedCount })}>
               <Trash2 className="size-4" />
             </Button>
           </CanvasTooltip>

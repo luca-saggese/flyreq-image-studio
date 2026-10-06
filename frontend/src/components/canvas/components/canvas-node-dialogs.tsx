@@ -19,6 +19,7 @@ import {
 } from "../utils/canvas-image-data";
 import { readImageMeta } from "../lib/image-utils";
 import { Spinner } from "./canvas-ui";
+import { useI18n } from "@/components/LanguageProvider";
 
 type BaseProps = { open: boolean; source: string; onClose: () => void };
 
@@ -35,6 +36,7 @@ const RATIO_OPTIONS = [
 
 /** 全屏裁剪：可拖拽/缩放选择区域 + 比例切换。 */
 export function CanvasCropDialog({ open, source, onClose, onApply }: BaseProps & { onApply: (dataUrl: string) => void }) {
+  const { t } = useI18n();
   const [ratio, setRatio] = useState("free");
   const [busy, setBusy] = useState(false);
   const [imageSize, setImageSize] = useState({ w: 0, h: 0 });
@@ -43,6 +45,7 @@ export function CanvasCropDialog({ open, source, onClose, onApply }: BaseProps &
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ kind: "move" | "resize"; handle?: string; startX: number; startY: number; startCrop: typeof crop } | null>(null);
   const ratioRef = useRef(ratio);
+  const ratioOptions = RATIO_OPTIONS.map((option) => option.value === "free" ? { ...option, label: t("canvas.ratio.free") } : option);
   useEffect(() => { ratioRef.current = ratio; }, [ratio]);
 
   // 加载图片尺寸
@@ -156,7 +159,7 @@ export function CanvasCropDialog({ open, source, onClose, onApply }: BaseProps &
     >
       {/* 顶部栏 */}
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
-        <span className="text-sm font-medium">裁剪图片</span>
+        <span className="text-sm font-medium">{t("canvas.crop.title")}</span>
         <Button variant="ghost" size="icon" onClick={onClose}>
           <X className="size-5" />
         </Button>
@@ -179,16 +182,16 @@ export function CanvasCropDialog({ open, source, onClose, onApply }: BaseProps &
       {/* 底部控制栏 */}
       <div className="flex shrink-0 items-center justify-between gap-4 border-t border-border px-4 py-3">
         <div className="flex items-center gap-2">
-          <Segmented value={ratio} onChange={handleRatioChange} options={RATIO_OPTIONS} className="flex-wrap" />
+          <Segmented value={ratio} onChange={handleRatioChange} options={ratioOptions} className="flex-wrap" />
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span>{Math.round(crop.w * imageSize.w)} × {Math.round(crop.h * imageSize.h)}</span>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>取消</Button>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>{t("canvas.cancel")}</Button>
           <Button size="sm" onClick={apply} disabled={busy}>
             {busy && <Spinner className="size-4" />}
-            应用裁剪
+            {t("canvas.crop.apply")}
           </Button>
         </div>
       </div>
@@ -299,6 +302,7 @@ function CropOverlay({ source, imageSize, crop, onPointerDown }: {
 
 /** 放大：目标倍数 + 算法。 */
 export function CanvasUpscaleDialog({ open, source, onClose, onApply }: BaseProps & { onApply: (dataUrl: string) => void }) {
+  const { t } = useI18n();
   const [multiplier, setMultiplier] = useState("2");
   const [algorithm, setAlgorithm] = useState<ImageUpscaleAlgorithm>("high");
   const [busy, setBusy] = useState(false);
@@ -316,12 +320,12 @@ export function CanvasUpscaleDialog({ open, source, onClose, onApply }: BaseProp
   };
 
   return (
-    <OpDialog open={open} title="放大图片" onClose={onClose} onApply={apply} busy={busy} source={source}>
-      <Field label="放大倍数">
+    <OpDialog open={open} title={t("canvas.upscale.title")} onClose={onClose} onApply={apply} busy={busy} source={source}>
+      <Field label={t("canvas.upscale.multiplier")}>
         <Segmented value={multiplier} onChange={setMultiplier} options={[{ value: "2", label: "2×" }, { value: "3", label: "3×" }, { value: "4", label: "4×" }]} />
       </Field>
-      <Field label="算法">
-        <Segmented<ImageUpscaleAlgorithm> value={algorithm} onChange={setAlgorithm} options={[{ value: "high", label: "高质量" }, { value: "bilinear", label: "双线性" }, { value: "nearest", label: "邻近" }]} />
+      <Field label={t("canvas.upscale.algorithm")}>
+        <Segmented<ImageUpscaleAlgorithm> value={algorithm} onChange={setAlgorithm} options={[{ value: "high", label: t("canvas.upscale.highQuality") }, { value: "bilinear", label: t("canvas.upscale.bilinear") }, { value: "nearest", label: t("canvas.upscale.nearest") }]} />
       </Field>
     </OpDialog>
   );
@@ -339,6 +343,7 @@ const SPLIT_PRESETS: { rows: number; columns: number; label: string }[] = [
 
 /** 全屏分割：左侧图上网格线 + 右侧预览，内置分割方式。 */
 export function CanvasSplitDialog({ open, source, onClose, onApply }: BaseProps & { onApply: (pieces: ImageSplitPiece[]) => void }) {
+  const { t } = useI18n();
   const [rows, setRows] = useState(2);
   const [columns, setColumns] = useState(2);
   const [busy, setBusy] = useState(false);
@@ -387,9 +392,9 @@ export function CanvasSplitDialog({ open, source, onClose, onApply }: BaseProps 
     <div className="fixed inset-0 z-[9999] flex select-none flex-col bg-background/95 backdrop-blur-sm">
       {/* 顶部栏 */}
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
-        <span className="text-sm font-medium">分割图片</span>
+        <span className="text-sm font-medium">{t("canvas.split.title")}</span>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span>{rows} × {columns} = {total} 块</span>
+          <span>{rows} × {columns} = {t("canvas.split.pieces", { count: total })}</span>
           <span>{imageSize.w}×{imageSize.h} → {Math.floor(imageSize.w / columns)}×{Math.floor(imageSize.h / rows)}</span>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose}>
@@ -406,10 +411,10 @@ export function CanvasSplitDialog({ open, source, onClose, onApply }: BaseProps 
 
         {/* 右侧：预览面板 */}
         <div className="w-72 shrink-0 overflow-y-auto border-l border-border bg-muted/30 p-3">
-          <div className="mb-2 text-xs font-medium text-muted-foreground">预览 ({total})</div>
+          <div className="mb-2 text-xs font-medium text-muted-foreground">{t("canvas.split.preview", { count: total })}</div>
           {previews.length === 0 ? (
             <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
-              <Spinner className="mr-2 size-4" /> 生成预览中…
+              <Spinner className="mr-2 size-4" /> {t("canvas.split.generatingPreview")}
             </div>
           ) : (
             <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(columns, 4)}, 1fr)` }}>
@@ -443,19 +448,19 @@ export function CanvasSplitDialog({ open, source, onClose, onApply }: BaseProps 
         </div>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            行
+            {t("canvas.split.rows")}
             <Input type="number" min={1} max={8} value={rows} onChange={(e) => setRows(clampInt(e.target.value, 1, 8))} className="h-7 w-14 text-xs" />
           </label>
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            列
+            {t("canvas.split.columns")}
             <Input type="number" min={1} max={8} value={columns} onChange={(e) => setColumns(clampInt(e.target.value, 1, 8))} className="h-7 w-14 text-xs" />
           </label>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>取消</Button>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>{t("canvas.cancel")}</Button>
           <Button size="sm" onClick={apply} disabled={busy}>
             {busy && <Spinner className="size-4" />}
-            应用分割
+            {t("canvas.split.apply")}
           </Button>
         </div>
       </div>
@@ -521,6 +526,7 @@ function SplitGridOverlay({ source, rows, columns }: { source: string; rows: num
 
 /** 视角：水平/俯仰/距离 + 广角。 */
 export function CanvasAngleDialog({ open, source, onClose, onApply }: BaseProps & { onApply: (dataUrl: string) => void }) {
+  const { t } = useI18n();
   const [horizontalAngle, setHorizontalAngle] = useState(0);
   const [pitchAngle, setPitchAngle] = useState(0);
   const [cameraDistance, setCameraDistance] = useState(0);
@@ -538,24 +544,25 @@ export function CanvasAngleDialog({ open, source, onClose, onApply }: BaseProps 
   };
 
   return (
-    <OpDialog open={open} title="调整视角" onClose={onClose} onApply={apply} busy={busy} source={source}>
-      <Field label={`水平 · ${horizontalAngle}`}>
+    <OpDialog open={open} title={t("canvas.angle.title")} onClose={onClose} onApply={apply} busy={busy} source={source}>
+      <Field label={t("canvas.angle.horizontal", { value: horizontalAngle })}>
         <Slider value={[horizontalAngle]} min={-60} max={60} step={1} onValueChange={(value) => setHorizontalAngle(value[0] ?? 0)} />
       </Field>
-      <Field label={`俯仰 · ${pitchAngle}`}>
+      <Field label={t("canvas.angle.pitch", { value: pitchAngle })}>
         <Slider value={[pitchAngle]} min={-45} max={45} step={1} onValueChange={(value) => setPitchAngle(value[0] ?? 0)} />
       </Field>
-      <Field label={`距离 · ${cameraDistance}`}>
+      <Field label={t("canvas.angle.distance", { value: cameraDistance })}>
         <Slider value={[cameraDistance]} min={-5} max={5} step={1} onValueChange={(value) => setCameraDistance(value[0] ?? 0)} />
       </Field>
-      <Field label="广角">
-        <Segmented value={wideAngle} onChange={setWideAngle} options={[{ value: "off", label: "关闭" }, { value: "on", label: "开启" }]} />
+      <Field label={t("canvas.angle.wide")}>
+        <Segmented value={wideAngle} onChange={setWideAngle} options={[{ value: "off", label: t("canvas.angle.off") }, { value: "on", label: t("canvas.angle.on") }]} />
       </Field>
     </OpDialog>
   );
 }
 
 function OpDialog({ open, title, source, busy, onClose, onApply, children }: { open: boolean; title: string; source: string; busy: boolean; onClose: () => void; onApply: () => void; children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="sm:max-w-lg">
@@ -570,11 +577,11 @@ function OpDialog({ open, title, source, busy, onClose, onApply, children }: { o
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={busy}>
-            取消
+            {t("canvas.cancel")}
           </Button>
           <Button onClick={onApply} disabled={busy}>
             {busy && <Spinner className="size-4" />}
-            应用
+            {t("canvas.apply")}
           </Button>
         </DialogFooter>
       </DialogContent>

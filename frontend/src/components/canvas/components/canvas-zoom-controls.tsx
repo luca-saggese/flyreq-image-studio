@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn } from "@/lib/utils";
 import { canvasTheme } from "../lib/canvas-theme";
 import { CanvasTooltip } from "./canvas-ui";
+import { useI18n } from "@/components/LanguageProvider";
 
 type CanvasZoomControlsProps = {
   scale: number;
@@ -19,19 +20,20 @@ type CanvasZoomControlsProps = {
 };
 
 export function CanvasZoomControls({ scale, onScaleChange, onReset, isMiniMapOpen, onToggleMiniMap }: CanvasZoomControlsProps) {
+  const { t } = useI18n();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const theme = canvasTheme;
 
   return (
     <div className="absolute bottom-5 left-5 z-50" onMouseDown={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
       <div className="flex h-14 items-center gap-1 rounded-xl border border-border bg-card/95 px-2 shadow-lg backdrop-blur">
-        <CanvasTooltip label={isMiniMapOpen ? "关闭小地图" : "打开小地图"}>
-          <Button variant={isMiniMapOpen ? "secondary" : "ghost"} size="icon-sm" onClick={onToggleMiniMap} aria-label={isMiniMapOpen ? "关闭小地图" : "打开小地图"}>
+        <CanvasTooltip label={isMiniMapOpen ? t("canvas.zoom.closeMinimap") : t("canvas.zoom.openMinimap")}>
+          <Button variant={isMiniMapOpen ? "secondary" : "ghost"} size="icon-sm" onClick={onToggleMiniMap} aria-label={isMiniMapOpen ? t("canvas.zoom.closeMinimap") : t("canvas.zoom.openMinimap")}>
             <Compass className="size-4" />
           </Button>
         </CanvasTooltip>
-        <CanvasTooltip label="重置视图">
-          <Button variant="ghost" size="icon-sm" onClick={onReset} aria-label="重置视图">
+        <CanvasTooltip label={t("canvas.zoom.reset")}>
+          <Button variant="ghost" size="icon-sm" onClick={onReset} aria-label={t("canvas.zoom.reset")}>
             <Focus className="size-4" />
           </Button>
         </CanvasTooltip>
@@ -44,11 +46,11 @@ export function CanvasZoomControls({ scale, onScaleChange, onReset, isMiniMapOpe
           className="w-24"
           style={{ accentColor: theme.node.activeStroke }}
           onChange={(event) => onScaleChange(Number(event.target.value) / 100)}
-          aria-label="放大/缩小画布"
+          aria-label={t("canvas.zoom.slider")}
         />
         <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{Math.round(scale * 100)}%</span>
-        <CanvasTooltip label="快捷键">
-          <Button variant={shortcutsOpen ? "secondary" : "ghost"} size="icon-sm" onClick={() => setShortcutsOpen(true)} aria-label="快捷键">
+        <CanvasTooltip label={t("canvas.zoom.shortcuts")}>
+          <Button variant={shortcutsOpen ? "secondary" : "ghost"} size="icon-sm" onClick={() => setShortcutsOpen(true)} aria-label={t("canvas.zoom.shortcuts")}>
             <HelpCircle className="size-4" />
           </Button>
         </CanvasTooltip>
@@ -56,15 +58,15 @@ export function CanvasZoomControls({ scale, onScaleChange, onReset, isMiniMapOpe
       <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>快捷键</DialogTitle>
+            <DialogTitle>{t("canvas.zoom.shortcuts")}</DialogTitle>
           </DialogHeader>
           <div className={cn("space-y-3 border-t border-border pt-4 text-sm")}>
-            <Shortcut label="拖动画布" value="平移视图" />
-            <Shortcut label="滚轮" value="缩放画布" />
-            <Shortcut label="Ctrl / Cmd + 拖动" value="框选多个节点" />
-            <Shortcut label="Shift / Ctrl / Cmd + 点击" value="追加选择节点" />
-            <Shortcut label="Ctrl / Cmd + C / V" value="复制 / 粘贴节点" />
-            <Shortcut label="Delete / Backspace" value="删除选中" />
+            <Shortcut label={t("canvas.zoom.panLabel")} value={t("canvas.zoom.panValue")} />
+            <Shortcut label={t("canvas.zoom.wheelLabel")} value={t("canvas.zoom.wheelValue")} />
+            <Shortcut label={t("canvas.zoom.selectLabel")} value={t("canvas.zoom.selectValue")} />
+            <Shortcut label={t("canvas.zoom.addLabel")} value={t("canvas.zoom.addValue")} />
+            <Shortcut label={t("canvas.zoom.copyLabel")} value={t("canvas.zoom.copyValue")} />
+            <Shortcut label={t("canvas.zoom.deleteLabel")} value={t("canvas.zoom.deleteValue")} />
           </div>
         </DialogContent>
       </Dialog>
