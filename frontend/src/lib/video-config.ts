@@ -1,7 +1,7 @@
 'use client';
 
 import type { VideoProtocol } from '@/lib/flyreq-models';
-import defaultVideoProtocolConfig from '../../../backend/video-protocol-capabilities.json';
+import defaultVideoProtocolConfig from '@/lib/default-video-protocol-config';
 
 export interface VideoDurationCapability {
   mode: 'enum' | 'range';

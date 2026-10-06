@@ -12,6 +12,7 @@ import {
 } from '@/lib/flyreq-models';
 import {
   applyVideoWorkspaceConfig,
+  applyVideoProtocolConfig,
   getVideoProtocolConfig,
   getVideoWorkspaceConfig,
   getVideoProtocolDurations,
@@ -40,6 +41,12 @@ describe('视频模型注册表与工作台配置', () => {
     localStorage.clear();
     applyDeploymentDefaultVideoModel();
     applyVideoWorkspaceConfig();
+  });
+
+  it('保持前端启动回退协议配置与后端能力源一致', () => {
+    const backendDefaults = JSON.parse(fs.readFileSync(path.resolve(testDir, '../../../../backend/video-protocol-capabilities.json'), 'utf8'));
+    applyVideoProtocolConfig();
+    expect(getVideoProtocolConfig()).toEqual(backendDefaults);
   });
 
   it('为缺少视频模型的旧注册表补充 OpenAI 默认模型和工作流字段', () => {
