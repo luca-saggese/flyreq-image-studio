@@ -1,9 +1,11 @@
 const http = require('http');
 const { createHash, randomUUID } = require('crypto');
+const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
 const next = process.env.NODE_ENV !== 'production' ? require('next') : null;
 const Database = require('better-sqlite3');
+const { createAuthService } = require('./auth');
 const sharp = require('sharp');
 const { WebSocketServer } = require('ws');
 const Busboy = require('busboy');
@@ -456,6 +458,7 @@ const videoTaskAbortControllers = new Map();
 const app = IS_DEV ? next({ dev: IS_DEV, hostname: HOSTNAME, port: PORT, dir: path.join(__dirname, '..', 'frontend') }) : null;
 const handle = app ? app.getRequestHandler() : null;
 const db = new Database(DB_PATH);
+const authService = createAuthService(db);
 const apiKeys = new Map();
 const taskSources = new Map(); // taskId -> { ip, apiKeyHash }
 const rateLimitBuckets = new Map(); // key -> { windowStart: number, count: number }
@@ -1339,6 +1342,97 @@ function sendJson(res, statusCode, body, extraHeaders = {}) {
     ...extraHeaders,
   });
   res.end(JSON.stringify(body));
+}
+
+/**
+ * Legge il token sessione dai cookie HTTP senza accettare valori parziali o ambigui.
+ * @param {import('http').IncomingMessage} req Richiesta HTTP entrante.
+ * @returns {string} Token sessione, oppure stringa vuota se assente.
+ */
+function getAuthCookie(req) {
+  const cookieHeader = String(req.headers.cookie || '');
+  const cookie = cookieHeader.split(';').map(value => value.trim()).find(value => value.startsWith('flyreq_session='));
+  if (!cookie) return '';
+  try {
+    return decodeURIComponent(cookie.slice('flyreq_session='.length));
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Costruisce il cookie di sessione HttpOnly con attributi coerenti con il deploy.
+ * @param {string} token Token opaco della sessione o stringa vuota per cancellarlo.
+ * @param {object} env Variabili d'ambiente runtime del server.
+ * @returns {string} Header Set-Cookie completo.
+ */
+function buildAuthCookie(token, env = getRuntimeEnv()) {
+  const secureSetting = String(env.AUTH_COOKIE_SECURE || '').trim().toLowerCase();
+  const secure = secureSetting ? !['false', '0', 'no', 'off'].includes(secureSetting) : process.env.NODE_ENV === 'production';
+  const maxAge = token ? 60 * 60 * 24 * 30 : 0;
+  return `flyreq_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? '; Secure' : ''}`;
+}
+
+/**
+ * Indica se l'ambiente dispone delle impostazioni sicure per inviare link di recupero.
+ * @param {object} env Variabili d'ambiente runtime del server.
+ * @returns {boolean} True quando SMTP mittente e URL pubblico sono validi.
+ */
+function isAuthRecoveryEnabled(env = getRuntimeEnv()) {
+  if (!String(env.AUTH_SMTP_HOST || '').trim() || !String(env.AUTH_SMTP_FROM || '').trim()) return false;
+  try {
+    const publicUrl = new URL(String(env.AUTH_PUBLIC_URL || '').trim());
+    return publicUrl.protocol === 'http:' || publicUrl.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Invia il link di recupero usando il relay SMTP configurato esclusivamente via ambiente.
+ * @param {string} email Indirizzo dell'account destinatario.
+ * @param {string} token Token monouso da includere nel link.
+ * @param {object} env Variabili d'ambiente runtime del server.
+ * @returns {Promise<void>} Termina dopo l'invio SMTP o solleva l'errore di trasporto.
+ */
+async function sendAuthRecoveryEmail(email, token, locale = 'en', env = getRuntimeEnv()) {
+  const port = parseIntegerEnv(env.AUTH_SMTP_PORT, 587, { min: 1, max: 65535 });
+  const secureSetting = String(env.AUTH_SMTP_SECURE || '').trim().toLowerCase();
+  const transporterOptions = {
+    host: String(env.AUTH_SMTP_HOST).trim(),
+    port,
+    secure: secureSetting ? ['true', '1', 'yes', 'on'].includes(secureSetting) : port === 465,
+  };
+  if (env.AUTH_SMTP_USER && env.AUTH_SMTP_PASSWORD) {
+    transporterOptions.auth = { user: env.AUTH_SMTP_USER, pass: env.AUTH_SMTP_PASSWORD };
+  }
+  const recoveryUrl = new URL(String(env.AUTH_PUBLIC_URL).trim());
+  recoveryUrl.searchParams.set('recovery', token);
+  const transporter = nodemailer.createTransport(transporterOptions);
+  const content = locale === 'zh'
+    ? {
+      subject: '重置 FlyReq Image 密码',
+      text: `请使用以下链接重置密码。链接将在一小时后失效：\n\n${recoveryUrl.toString()}\n\n如果你没有请求重置密码，可以忽略此邮件。`,
+    }
+    : {
+      subject: 'Reset your FlyReq Image password',
+      text: `Use this link to reset your password. It expires in one hour:\n\n${recoveryUrl.toString()}\n\nIf you did not request this, you can ignore this email.`,
+    };
+  await transporter.sendMail({
+    from: String(env.AUTH_SMTP_FROM).trim(),
+    to: email,
+    ...content,
+  });
+}
+
+/**
+ * Applica un limite dedicato ai tentativi di autenticazione per indirizzo IP e azione.
+ * @param {import('http').IncomingMessage} req Richiesta HTTP entrante.
+ * @param {string} action Tipo di operazione account.
+ * @returns {{allowed: boolean, retryAfterSeconds: number}} Esito e attesa suggerita.
+ */
+function consumeAuthRateLimit(req, action) {
+  return consumeRateLimit(`auth:${action}:${getClientIp(req)}`, 10, 15 * 60 * 1000);
 }
 
 function sendHttpError(res, error) {
@@ -3347,6 +3441,97 @@ async function handleApi(req, res, pathname) {
   try {
     const apiPathname = pathname.replace(/\/+$/, '');
 
+    // 公开这些元数据，供初始化登录界面和品牌信息，不包含凭据或数据账户。
+    if (apiPathname === '/api/flyreq/auth/config' && req.method === 'GET') {
+      sendJson(res, 200, { recoveryEnabled: isAuthRecoveryEnabled() });
+      return true;
+    }
+
+    // 返回当前会话用户；匿名访问以 user=null 响应，便于前端渲染登录表单。
+    if (apiPathname === '/api/flyreq/auth/me' && req.method === 'GET') {
+      sendJson(res, 200, { user: authService.getSessionUser(getAuthCookie(req)) });
+      return true;
+    }
+
+    // 根据邮箱和密码创建账户，并通过 HttpOnly Cookie 建立登录会话。
+    if (apiPathname === '/api/flyreq/auth/register' && req.method === 'POST') {
+      const limit = consumeAuthRateLimit(req, 'register');
+      if (!limit.allowed) {
+        sendJson(res, 429, { error: 'Too many attempts. Try again later.', code: 'AUTH_RATE_LIMITED' }, { 'Retry-After': String(limit.retryAfterSeconds) });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      const result = await authService.register(body.email, body.password);
+      sendJson(res, 201, { user: result.user }, { 'Set-Cookie': buildAuthCookie(result.token) });
+      return true;
+    }
+
+    // 校验账户凭据并创建新的 HttpOnly 会话。
+    if (apiPathname === '/api/flyreq/auth/login' && req.method === 'POST') {
+      const limit = consumeAuthRateLimit(req, 'login');
+      if (!limit.allowed) {
+        sendJson(res, 429, { error: 'Too many attempts. Try again later.', code: 'AUTH_RATE_LIMITED' }, { 'Retry-After': String(limit.retryAfterSeconds) });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      const result = await authService.login(body.email, body.password);
+      if (!result) {
+        sendJson(res, 401, { error: 'Email or password is incorrect.', code: 'INVALID_CREDENTIALS' });
+        return true;
+      }
+      sendJson(res, 200, { user: result.user }, { 'Set-Cookie': buildAuthCookie(result.token) });
+      return true;
+    }
+
+    // 撤销当前会话并清除浏览器中的会话 Cookie。
+    if (apiPathname === '/api/flyreq/auth/logout' && req.method === 'POST') {
+      authService.revokeSession(getAuthCookie(req));
+      sendJson(res, 200, { ok: true }, { 'Set-Cookie': buildAuthCookie('') });
+      return true;
+    }
+
+    // 对有效账户发送一次性邮件链接，同时对所有邮箱返回相同响应以防枚举。
+    if (apiPathname === '/api/flyreq/auth/recover' && req.method === 'POST') {
+      const limit = consumeAuthRateLimit(req, 'recover');
+      if (!limit.allowed) {
+        sendJson(res, 429, { error: 'Too many attempts. Try again later.', code: 'AUTH_RATE_LIMITED' }, { 'Retry-After': String(limit.retryAfterSeconds) });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      const env = getRuntimeEnv();
+      if (isAuthRecoveryEnabled(env)) {
+        const recovery = authService.createRecoveryToken(body.email);
+        if (recovery) {
+          try {
+            await sendAuthRecoveryEmail(recovery.email, recovery.token, body.locale === 'zh' ? 'zh' : 'en', env);
+          } catch (error) {
+            console.error('[auth] recovery email delivery failed:', error?.message || error);
+          }
+        }
+      }
+      sendJson(res, 200, { ok: true });
+      return true;
+    }
+
+    // 消费有效恢复令牌、更新密码并撤销该用户的既有会话。
+    if (apiPathname === '/api/flyreq/auth/reset' && req.method === 'POST') {
+      const limit = consumeAuthRateLimit(req, 'reset');
+      if (!limit.allowed) {
+        sendJson(res, 429, { error: 'Too many attempts. Try again later.', code: 'AUTH_RATE_LIMITED' }, { 'Retry-After': String(limit.retryAfterSeconds) });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      const changed = await authService.resetPassword(body.token, body.password);
+      sendJson(res, changed ? 200 : 400, changed ? { ok: true } : { error: 'This recovery link is invalid or expired.', code: 'INVALID_RECOVERY_TOKEN' });
+      return true;
+    }
+
+    if (!['/api/flyreq/manifest.webmanifest', '/api/flyreq/config'].includes(apiPathname)
+      && !authService.getSessionUser(getAuthCookie(req))) {
+      sendJson(res, 401, { error: 'Authentication required.', code: 'AUTH_REQUIRED' });
+      return true;
+    }
+
     if (req.method === 'GET' && apiPathname === '/api/flyreq/queue-status') {
       sendJson(res, 200, getQueueStats());
       return true;
@@ -3703,7 +3888,7 @@ async function handleApi(req, res, pathname) {
     } else if (error && typeof error.statusCode === 'number') {
       sendJson(res, error.statusCode, { error: normalizeError(error) });
     } else {
-      sendJson(res, 400, { error: normalizeError(error) });
+      sendJson(res, 400, { error: normalizeError(error), code: error?.code });
     }
     return true;
   }
@@ -3764,6 +3949,11 @@ const startServer = () => {
       return;
     }
     if (pathname === '/api/flyreq/ws') {
+      if (!authService.getSessionUser(getAuthCookie(req))) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
+        socket.destroy();
+        return;
+      }
       wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
       return;
     }
